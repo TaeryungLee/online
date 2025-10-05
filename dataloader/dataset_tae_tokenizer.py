@@ -19,21 +19,21 @@ class MotionDataset(data.Dataset):
         
         
         if dataset_name == 't2m_272':
-            self.data_root = './humanml3d_272'
+            self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.meta_dir = pjoin(self.data_root, 'mean_std')
             split_file = pjoin(self.data_root, 'split', 'train.txt')
 
         elif dataset_name == 't2m_babel_272':
             # HumanML3D-272 data dir
-            self.hml_data_root = './humanml3d_272'
+            self.hml_data_root = './data/humanml3d_272'
             self.hml_motion_dir = pjoin(self.hml_data_root, 'motion_data')
             hml_split_file = pjoin(self.hml_data_root, 'split', 'train.txt')
 
             # Babel-272-stream data dir
-            self.babel_stream_data_root = './babel_272_stream'
+            self.babel_stream_data_root = './data/babel_272_stream'
             self.babel_stream_motion_dir = pjoin(self.babel_stream_data_root, 'train_stream')
-            self.meta_dir = './babel_272/t2m_babel_mean_std'
+            self.meta_dir = './data/babel_272/t2m_babel_mean_std'
 
         else:
             raise ValueError(f"Invalid dataset name: {dataset_name}")

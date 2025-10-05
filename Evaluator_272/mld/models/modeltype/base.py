@@ -77,17 +77,17 @@ class BaseModel(LightningModule):
         if not self.trainer.sanity_checking:
             self.log_dict(dico, sync_dist=True, rank_zero_only=True)
 
-    def training_epoch_end(self, outputs):
-        return self.allsplit_epoch_end("train", outputs)
+    def on_train_epoch_end(self):
+        return self.allsplit_epoch_end("train", outputs=None)
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         # # ToDo
         # # re-write vislization checkpoint?
         # # visualize validation
         # parameters = {"xx",xx}
         # vis_path = viz_epoch(self, dataset, epoch, parameters, module=None,
         #                         folder=parameters["folder"], writer=None, exps=f"_{dataset_val.dataset_name}_"+val_set)
-        return self.allsplit_epoch_end("val", outputs)
+        return self.allsplit_epoch_end("val", outputs=None)
 
     def test_epoch_end(self, outputs):
         self.save_npy(outputs)

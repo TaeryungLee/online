@@ -658,5 +658,5 @@ class TEMOS(BaseModel):
         if not self.trainer.sanity_checking:
             self.log_dict(dico, sync_dist=True, rank_zero_only=True)
 
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         return self.allsplit_epoch_end("train", outputs)

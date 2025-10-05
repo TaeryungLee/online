@@ -15,7 +15,7 @@ class MotionDataset(data.Dataset):
         self.dataset_name = dataset_name
 
         if dataset_name == 't2m_272':
-            self.data_root = './humanml3d_272'
+            self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
@@ -24,13 +24,13 @@ class MotionDataset(data.Dataset):
             split_file = pjoin(self.data_root, 'split', 'train.txt')
             
         elif dataset_name == 't2m_babel_272':
-            self.hml_data_root = './humanml3d_272'
+            self.hml_data_root = './data/humanml3d_272'
             self.hml_motion_dir = pjoin(self.hml_data_root, 'motion_data')
             hml_split_file = pjoin(self.hml_data_root, 'split', 'train.txt')
             self.joints_num = 22
             self.max_motion_length = 300
 
-            self.babel_data_root = './babel_272'
+            self.babel_data_root = './data/babel_272'
             self.babel_motion_dir = pjoin(self.babel_data_root, 'motion_data')
             babel_split_file = pjoin(self.babel_data_root, 'split', 'train.txt')
             self.meta_dir = pjoin(self.babel_data_root, 't2m_babel_mean_std')

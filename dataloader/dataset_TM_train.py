@@ -24,7 +24,7 @@ class Text2MotionDataset(data.Dataset):
         self.unit_length = unit_length
 
         if dataset_name == 't2m_272':
-            self.data_root = './humanml3d_272'
+            self.data_root = './data/humanml3d_272'
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             fps = 30

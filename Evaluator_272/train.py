@@ -164,21 +164,12 @@ def main():
     ]
     logger.info("Callbacks initialized")
 
-    if len(cfg.DEVICE) > 1:
-        # ddp_strategy = DDPStrategy(find_unused_parameters=False)
-        ddp_strategy = "ddp"
-    else:
-        ddp_strategy = None
-    
     # trainer
-    trainer = pl.Trainer(
+    trainer_kwargs = dict(
         benchmark=False,
         max_epochs=cfg.TRAIN.END_EPOCH,
         accelerator=cfg.ACCELERATOR,
         devices=cfg.DEVICE,
-        # gpus=2,
-        strategy=ddp_strategy,
-        # move_metrics_to_cpu=True,
         default_root_dir=cfg.FOLDER_EXP,
         log_every_n_steps=cfg.LOGGER.VAL_EVERY_STEPS,
         deterministic=False,
@@ -188,6 +179,11 @@ def main():
         callbacks=callbacks,
         check_val_every_n_epoch=cfg.LOGGER.VAL_EVERY_STEPS,
     )
+    if len(cfg.DEVICE) > 1:
+        # Use DDP only when training across multiple devices
+        trainer_kwargs["strategy"] = "ddp"
+
+    trainer = pl.Trainer(**trainer_kwargs)
     logger.info("Trainer initialized")
 
     if cfg.TRAIN.STAGE == 'temos':

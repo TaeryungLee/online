@@ -11,7 +11,7 @@ from torch.utils.data._utils.collate import default_collate
 
 
 def collate_fn(batch):
-    batch.sort(key=lambda x: x[1], reverse=True)
+    batch.sort(key=lambda x: x[2], reverse=True)
     return default_collate(batch)
 
 
@@ -27,35 +27,17 @@ class Text2MotionDataset(data.Dataset):
         
 
         if dataset_name == 't2m_272':
-            self.data_root = './humanml3d_272'
+            self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             self.max_motion_length = 300
             fps = 30
-            self.meta_dir = './humanml3d_272/mean_std'
+            self.meta_dir = './data/humanml3d_272/mean_std'
             if is_test:
                 split_file = pjoin(self.data_root, 'split', 'test.txt')
             else:
                 split_file = pjoin(self.data_root, 'split', 'val.txt')
-        elif dataset_name == 't2m_babel_272':
-            # HumanML3D-272 data
-            self.hml_data_root = './humanml3d_272'
-            self.hml_motion_dir = pjoin(self.hml_data_root, 'motion_data')
-            if is_test:
-                hml_split_file = pjoin(self.hml_data_root, 'split', 'test.txt')
-            else:
-                hml_split_file = pjoin(self.hml_data_root, 'split', 'val.txt')
-
-            self.joints_num = 22
-            self.max_motion_length = 300
-            fps = 30
-
-            # Babel-272 data
-            self.babel_data_root = './babel_272'
-            self.babel_motion_dir = pjoin(self.babel_data_root, 'motion_data')
-            babel_split_file = pjoin(self.babel_data_root, 'split', 'val.txt')
-            self.meta_dir = pjoin(self.babel_data_root, 't2m_babel_mean_std')
 
         mean = np.load(pjoin(self.meta_dir, 'Mean.npy')) 
         std = np.load(pjoin(self.meta_dir, 'Std.npy'))
@@ -65,43 +47,60 @@ class Text2MotionDataset(data.Dataset):
         data_dict = {}
         id_list = []
 
-        if dataset_name == 't2m_272':
-            with cs.open(split_file, 'r') as f:
-                for line in f.readlines():
-                    id_list.append(line.strip())
-
-        elif dataset_name == 't2m_babel_272':
-            with cs.open(hml_split_file, 'r') as f:
-                for line in f.readlines():
-                    id_list.append(line.strip())
-            with cs.open(babel_split_file, 'r') as f:
-                for line in f.readlines():
-                    id_list.append('b_' + line.strip())
+        
+        with cs.open(split_file, 'r') as f:
+            for line in f.readlines():
+                id_list.append(line.strip())
 
         new_name_list = []
         length_list = []
 
 
         for name in tqdm(id_list):
-            try:
-                if dataset_name == 't2m_272':
-                    motion = np.load(pjoin(self.motion_dir, name + '.npy'))
-                elif dataset_name == 't2m_babel_272':
-                    if name.split('_')[0] == 'b':
-                        motion = np.load(pjoin(self.babel_motion_dir, name.split('_')[1] + '.npy'))
+            motion = np.load(pjoin(self.motion_dir, name + '.npy'))
+            if (len(motion)) < min_motion_len or (len(motion) >= self.max_motion_length):
+                continue
+
+            text_data = []
+            flag = False
+            with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
+                for line in f.readlines():
+                    text_dict = {}
+                    line_split = line.strip().split('#')
+                    caption = line_split[0]
+                    tokens = line_split[1].split(' ')
+                    f_tag = float(line_split[2])
+                    to_tag = float(line_split[3])
+                        
+                    f_tag = 0.0 if np.isnan(f_tag) else f_tag
+                    to_tag = 0.0 if np.isnan(to_tag) else to_tag
+
+                    text_dict['caption'] = caption
+                    text_dict['tokens'] = tokens
+
+                    if f_tag == 0.0 and to_tag == 0.0:
+                        flag = True
+                        text_data.append(text_dict)
                     else:
-                        motion = np.load(pjoin(self.hml_motion_dir, name + '.npy'))
+                        n_motion = motion[int(f_tag*fps) : int(to_tag*fps)]           
+                        if (len(n_motion)) < min_motion_len or (len(n_motion) >= self.max_motion_length):
+                            continue
+                        new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
+                        while new_name in data_dict:
+                            new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name
+                        data_dict[new_name] = {'motion': n_motion,
+                                                    'length': len(n_motion),
+                                                    'text':[text_dict]}
+                        new_name_list.append(new_name)
+                        length_list.append(len(n_motion))
+                   
 
-                if (len(motion)) < min_motion_len or (len(motion) >= self.max_motion_length):
-                    continue
-
+            if flag:
                 data_dict[name] = {'motion': motion,
-                                    'length': len(motion)
-                                        }
+                                    'length': len(motion),
+                                    'text': text_data}
                 new_name_list.append(name)
                 length_list.append(len(motion))
-            except:
-                pass
 
 
         name_list, length_list = zip(*sorted(zip(new_name_list, length_list), key=lambda x: x[1]))
@@ -131,8 +130,9 @@ class Text2MotionDataset(data.Dataset):
         idx = self.pointer + item
         name = self.name_list[idx]
         data = self.data_dict[name]
-        motion, m_length = data['motion'], data['length']
-
+        motion, m_length, text_list = data['motion'], data['length'], data['text']
+        text_data = random.choice(text_list)
+        caption = text_data['caption']
 
         if self.unit_length < 10:
             coin2 = np.random.choice(['single', 'single', 'double'])
@@ -155,7 +155,7 @@ class Text2MotionDataset(data.Dataset):
                                      np.zeros((self.max_motion_length - m_length, motion.shape[1]))
                                      ], axis=0)
 
-        return motion, m_length
+        return caption, motion, m_length
 
 
 

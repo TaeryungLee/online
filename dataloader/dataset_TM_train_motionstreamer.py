@@ -23,13 +23,13 @@ class Text2MotionDataset(data.Dataset):
         
         if dataset_name == 't2m_babel_272':
             # Babel-272-stream data dir
-            self.babel_stream_data_root = './babel_272_stream' 
+            self.babel_stream_data_root = './data/babel_272_stream' 
             self.babel_stream_text_dir = pjoin(self.babel_stream_data_root, 'train_stream_text')
             fps = 30
             self.max_motion_length = 78
 
             # HumanML3D-272 data dir
-            self.hml_data_root = './humanml3d_272'
+            self.hml_data_root = './data/humanml3d_272'
             self.hml_text_dir = pjoin(self.hml_data_root, 'texts')
     
         else:

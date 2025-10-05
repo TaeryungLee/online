@@ -38,6 +38,11 @@ logger.info(f'Training on {args.dataname}, motions are with {args.nb_joints} joi
 
 
 
+##### ---- Rendering ---- #####
+
+
+
+
 ##### ---- Dataloader ---- #####
 train_loader = dataset_tae.DATALoader(args.dataname,
                                         args.batch_size,
@@ -120,6 +125,8 @@ for nb_iter in range(1, args.warm_up_iter):
 
 ##### ---- Training ---- #####
 avg_recons, avg_kl, avg_root = 0., 0., 0.
+
+
 
 if args.num_gpus > 1:
     best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, val_loader, net.module, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)

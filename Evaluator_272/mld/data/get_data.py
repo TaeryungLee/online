@@ -3,14 +3,21 @@ import numpy as np
 # from .humanml.utils.word_vectorizer import WordVectorizer, WordVectorizer_only_text_token
 from .utils import *
 from .HumanML3D_272 import HumanML3D_272_DataModule
+from .BABEL_272 import BABEL_272_DataModule
 
 
 def get_mean_std(phase, cfg, dataset_name):
-    assert dataset_name == 'humanml3d_272'
+    assert dataset_name == 'humanml3d_272' or dataset_name == 'babel_272'
         
     data_root = eval(f"cfg.DATASET.{dataset_name.upper()}.ROOT")
-    mean = np.load(pjoin(data_root, 'mean_std', cfg.DATASET.VERSION, cfg.DATASET.MOTION_TYPE, "Mean.npy"))
-    std = np.load(pjoin(data_root, 'mean_std', cfg.DATASET.VERSION, cfg.DATASET.MOTION_TYPE, "Std.npy"))
+
+    if dataset_name == 'babel_272':
+        mean = np.load(pjoin(data_root, 't2m_babel_mean_std', "Mean.npy"))
+        std = np.load(pjoin(data_root, 't2m_babel_mean_std', "Std.npy"))
+
+    else:
+        mean = np.load(pjoin(data_root, 'mean_std', cfg.DATASET.VERSION, cfg.DATASET.MOTION_TYPE, "Mean.npy"))
+        std = np.load(pjoin(data_root, 'mean_std', cfg.DATASET.VERSION, cfg.DATASET.MOTION_TYPE, "Std.npy"))
     return mean, std
 
 
@@ -103,7 +110,7 @@ def reget_mean_std(cfg, dataset_name, mean, std):
 
 
 def get_collate_fn(name, cfg, phase="train"):
-    if name.lower() in ['humanml3d_272']:
+    if name.lower() in ['humanml3d_272', 'babel_272']:
         if cfg.model.condition in ['text_all', 'text_face', 'text_body', 'text_hand', 'text_face_body', 'text_seperate', 'only_pose_concat', 'only_pose_fusion'] and (not cfg.TEST.inference_vq_code):
             return mld_collate_text_all
         elif cfg.TEST.inference_vq_code:
@@ -118,9 +125,10 @@ def get_collate_fn(name, cfg, phase="train"):
 
 # map config name to module&path
 dataset_module_map = {
-    'humanml3d_272': HumanML3D_272_DataModule
+    'humanml3d_272': HumanML3D_272_DataModule,
+    'babel_272': BABEL_272_DataModule
 }
-motion_subdir = {'humanml3d_272': 'motion_data'}
+motion_subdir = {'humanml3d_272': 'motion_data', 'babel_272': 'motion_data'}
 
 
 def get_datasets(cfg, logger=None, phase="train"):
@@ -128,7 +136,7 @@ def get_datasets(cfg, logger=None, phase="train"):
     dataset_names = eval(f"cfg.{phase.upper()}.DATASETS")
     datasets = []
     for dataset_name in dataset_names:
-        if dataset_name.lower() in ["humanml3d_272"]:
+        if dataset_name.lower() in ["humanml3d_272", "babel_272"]:
     
             if 'MINOR_MOTION_TYPE' in cfg.DATASET:
                 input_format = cfg.DATASET.MINOR_MOTION_TYPE
@@ -148,7 +156,6 @@ def get_datasets(cfg, logger=None, phase="train"):
             # get collect_fn
             collate_fn = get_collate_fn(dataset_name, cfg, phase)
             # get dataset module
-            
             dataset = dataset_module_map[dataset_name.lower()](
                 cfg=cfg,
                 batch_size=cfg.TRAIN.BATCH_SIZE,

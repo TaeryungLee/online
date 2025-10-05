@@ -1,0 +1,12 @@
+data
+__pycache__/
+output
+human_models
+Evaluator_272/deps/
+Evaluator_272/datasets/
+Evaluator_272/experiments/
+Evaluator_272/epoch=99.ckpt
+gif
+
+
+

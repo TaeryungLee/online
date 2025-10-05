@@ -12,7 +12,7 @@ def get_args_parser():
 
     ## optimization
     parser.add_argument('--total-iter', default=2000000, type=int, help='number of total iterations to run')
-    parser.add_argument('--warm-up-iter', default=1000, type=int, help='number of total iterations for warmup')
+    parser.add_argument('--warm-up-iter', default=0, type=int, help='number of total iterations for warmup')
     parser.add_argument('--lr', default=5e-5, type=float, help='max learning rate')
     parser.add_argument('--lr-scheduler', default=[50000, 400000], nargs="+", type=int, help="learning rate schedule (iterations)")
     parser.add_argument('--gamma', default=0.05, type=float, help="learning rate decay")
