@@ -259,3 +259,50 @@ while nb_iter <= args.total_iter:
             }, os.path.join(args.out_dir, f'latest.pth'))
                      
 accelerator.wait_for_everyone()
+
+
+
+
+# evaluate jerk function -- to be adapted for the new BABEL-stream dataset
+def evaluate_jerk(motion_loaders):
+    jerk_score_dict = {}
+    auj_score_dict = {}
+    auj_plot_values = {}
+    #print('========== Evaluating Jerk ==========')
+    for model_name, motion_loader in motion_loaders.items():
+        all_jerks = []
+        for idx, batch in enumerate(motion_loader):#tqdm(enumerate(motion_loader)):
+            motions = batch[4] # [bs, seq_len, nfeats]
+            lengths = batch[5] # [bs]
+            if motions.shape[-1] == 263: # HUMANML3D ============
+                GT_jerk = 0.033031363 # --> extracted from the GT
+                #[bs, nfeats, 1, seq_len]
+                n_joints = 22 # HumanML --> 22
+                motions = motion_loader.dataset.inv_transform(motions) # we need to recover the original denormed values.
+                motions = recover_from_ric(motions.float(), n_joints) # --> [bs, seqlen, njoints, 3]
+            elif motions.shape[-1] == 135: # BABEL ============
+                from data_loaders.amass.transforms import SlimSMPLTransform
+                transform = SlimSMPLTransform(batch_size=8, name='SlimSMPLTransform', ename='smplnh', normalization=True)
+                GT_jerk = 0.016383045 # --> extracted from the GT
+                motions = motions.reshape(-1, motions.shape[-1])
+                datastruct = transform.SlimDatastruct(features=motions.float())
+                motions = datastruct.joints
+                motions = motions.reshape(lengths.shape[0], -1, motions.shape[-2], motions.shape[-1]) # --> [SEQ, 22, 3]
+            else:
+                raise ValueError(f'Unsupported motion loader [{model_name}]')
+            
+            batch_jerk = calculate_jerk(motions.cpu().numpy(), lengths.cpu().numpy()) # --> [BS, SEQ]
+            all_jerks.append(batch_jerk)
+
+        all_jerks = np.concatenate(all_jerks, axis=0) # --> [BS, SEQ]
+        seq_jerks = all_jerks.mean(axis=0) # --> [SEQ] --> mean jerk per frame in the seq
+
+        auj_plot_values[model_name] = seq_jerks
+        diff = seq_jerks - GT_jerk
+        auj_score_dict[model_name] = np.sum(np.abs(diff)) # Area Under Jerk Curve
+        jerk_score_dict[model_name] = seq_jerks.max() # Jerk --> max jerk along the sequence
+
+        print(f'---> [{model_name}] PeakJerk: {jerk_score_dict[model_name]:.4f} AUJ: {auj_score_dict[model_name]:.4f}')
+
+    return jerk_score_dict, auj_score_dict, auj_plot_values
+

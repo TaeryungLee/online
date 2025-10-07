@@ -1,0 +1,1 @@
+python train_latent.py --hidden_size 512 --depth 12 --latent_dim 128 --exp-name latent_dev --dataname t2m_272 --num_gpus 1 --activation gelu --norm ln --attn-window 16 --n-heads 8

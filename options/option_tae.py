@@ -9,21 +9,22 @@ def get_args_parser():
     parser.add_argument('--dataname', type=str, default='t2m_272', help='dataset directory')
     parser.add_argument('--batch-size', default=128, type=int, help='batch size')
     parser.add_argument('--window-size', type=int, default=64, help='training motion length')
-
+    parser.add_argument('--unit-length', type=int, default=4, help='unit length')
     ## optimization
     parser.add_argument('--total-iter', default=2000000, type=int, help='number of total iterations to run')
-    parser.add_argument('--warm-up-iter', default=0, type=int, help='number of total iterations for warmup')
+    parser.add_argument('--warm-up-iter', default=1000, type=int, help='number of total iterations for warmup')
     parser.add_argument('--lr', default=5e-5, type=float, help='max learning rate')
     parser.add_argument('--lr-scheduler', default=[50000, 400000], nargs="+", type=int, help="learning rate schedule (iterations)")
     parser.add_argument('--gamma', default=0.05, type=float, help="learning rate decay")
 
-    parser.add_argument('--weight-decay', default=0.0, type=float, help='weight decay')
-    
     # causal TAE architecture
-    parser.add_argument("--down-t", type=int, default=2, help="downsampling rate")
-    parser.add_argument("--stride-t", type=int, default=2, help="stride size")
+    parser.add_argument('--weight-decay', default=0.0, type=float, help='weight decay')
+    parser.add_argument('--activation', type=str, default='gelu', help='activation function')
+    parser.add_argument('--norm', type=str, default='ln', help='normalization function')
     parser.add_argument("--depth", type=int, default=3, help="depth of the network")
-    parser.add_argument("--dilation-growth-rate", type=int, default=3, help="dilation growth rate")
+    parser.add_argument("--attn-window", type=int, default=16, help="attention window")
+    parser.add_argument("--n-heads", type=int, default=8, help="number of heads")
+
 
     ## resume
     parser.add_argument("--resume-pth", type=str, default=None, help='resume pth for causal TAE')
@@ -35,6 +36,7 @@ def get_args_parser():
     parser.add_argument('--visual-name', type=str, default='vis', help='output directory')
     parser.add_argument('--exp-name', type=str, default='exp', help='name of the experiment, will create a file inside out-dir')
     parser.add_argument('--latent_dir', type=str, default='t2m_latents/', help='latent directory')
+    
     ## other
     parser.add_argument('--print-iter', default=200, type=int, help='print frequency')
     parser.add_argument('--eval-iter', default=20000, type=int, help='evaluation frequency')

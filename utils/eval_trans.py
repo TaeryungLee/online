@@ -204,8 +204,8 @@ def evaluation_tae_multi(out_dir, val_loader, net, logger, writer, nb_iter, best
                 num_poses += pose_xyz.shape[0]
 
                 if draw and i < 5:
-                    visualize_smpl_85(recover_from_local_rotation(pose.squeeze(0), num_joints), smpl_model, title=draw_text[0], output_path=out_dir, name=f'gt_{i}')
-                    visualize_smpl_85(recover_from_local_rotation(pred_pose.squeeze(0), num_joints), smpl_model, title=draw_text[0], output_path=out_dir, name=f'pred_{i}')
+                    visualize_smpl_85(recover_from_local_rotation(pose.squeeze(0), num_joints), smpl_model, title='', output_path=out_dir, name=f'gt_{i}')
+                    visualize_smpl_85(recover_from_local_rotation(pred_pose.squeeze(0), num_joints), smpl_model, title='', output_path=out_dir, name=f'pred_{i}')
                 else:
                     draw = False
 
