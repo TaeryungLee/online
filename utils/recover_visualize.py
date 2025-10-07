@@ -157,7 +157,7 @@ def smpl85_2_smpl322(smpl_85_data):
     result = np.concatenate((smpl_85_data[:,:66], np.zeros((smpl_85_data.shape[0], 90)), np.zeros((smpl_85_data.shape[0], 3)), np.zeros((smpl_85_data.shape[0], 50)), np.zeros((smpl_85_data.shape[0], 100)), smpl_85_data[:,72:72+3], smpl_85_data[:,75:]), axis=-1)
     return result
 
-def visualize_smpl_85(data, smpl_model, title=None, output_path='visualize_result', name='', fps=60):
+def visualize_smpl_85(data, smpl_model, title=None, output_path='visualize_result', name='', fps=30):
     # data: torch.Size([nframe, 85])
     data = data.to(torch.float32)
 

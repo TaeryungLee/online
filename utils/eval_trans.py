@@ -183,7 +183,7 @@ def evaluation_tae_multi(out_dir, val_loader, net, logger, writer, nb_iter, best
 
     for batch in val_loader:
         motion, m_length = batch
-        motion = motion.to(device)
+        motion = motion.to(device).to(torch.float32)
         bs, seq = motion.shape[0], motion.shape[1]
         num_joints = 22
         pred_pose_eval = torch.zeros((bs, seq, motion.shape[-1])).to(device)
@@ -203,7 +203,7 @@ def evaluation_tae_multi(out_dir, val_loader, net, logger, writer, nb_iter, best
                 mpjpe += torch.sum(calculate_mpjpe(pose_xyz[:, :m_length[i]].squeeze(), pred_xyz[:, :m_length[i]].squeeze()))
                 num_poses += pose_xyz.shape[0]
 
-                if draw and i < 5:
+                if draw and i < 3:
                     visualize_smpl_85(recover_from_local_rotation(pose.squeeze(0), num_joints), smpl_model, title='', output_path=out_dir, name=f'gt_{i}')
                     visualize_smpl_85(recover_from_local_rotation(pred_pose.squeeze(0), num_joints), smpl_model, title='', output_path=out_dir, name=f'pred_{i}')
                 else:
