@@ -5,6 +5,7 @@ import torch
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 import models.tae as tae
+from models.latent import LatentSpaceVAE
 import utils.losses as losses 
 import options.option_tae as option_tae
 import utils.utils_model as utils_model
@@ -47,25 +48,37 @@ logger.info(f'Training on {args.dataname}, motions are with {args.nb_joints} joi
 train_loader = dataset_tae.DATALoader(args.dataname,
                                         args.batch_size,
                                         window_size=args.window_size,
-                                        unit_length=2**args.down_t)
+                                        unit_length=args.unit_length)
 
 val_loader = dataset_eval_tae.DATALoader(args.dataname, False,
                                         32,
-                                        unit_length=2**args.down_t)
+                                        unit_length=args.unit_length)
 
 ##### ---- Network ---- #####
 clip_range = [-30,20]
 
-net = tae.Causal_HumanTAE(
-                       hidden_size=args.hidden_size,
-                       down_t=args.down_t,
-                       stride_t=args.stride_t,
-                       depth=args.depth,
-                       dilation_growth_rate=args.dilation_growth_rate,
-                       activation='relu',
-                       latent_dim=args.latent_dim,
-                       clip_range=clip_range
-                       )
+# net = tae.Causal_HumanTAE(
+#                        hidden_size=args.hidden_size,
+#                        down_t=args.down_t,
+#                        stride_t=args.stride_t,
+#                        depth=args.depth,
+#                        dilation_growth_rate=args.dilation_growth_rate,
+#                        activation='relu',
+#                        latent_dim=args.latent_dim,
+#                        clip_range=clip_range
+#                        )
+
+net = LatentSpaceVAE(
+    hidden_size=args.hidden_size,
+    depth=args.depth,
+    attn_window=args.attn_window,
+    n_heads=args.n_heads,
+    activation=args.activation,
+    norm=args.norm,
+    latent_dim=args.latent_dim,
+    clip_range=clip_range
+)
+
 
 
 if args.resume_pth : 
