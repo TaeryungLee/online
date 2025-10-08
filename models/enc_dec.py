@@ -76,6 +76,59 @@ class ConvCausalEncoder(nn.Module):
         # return z, mu, logvar
         return mu, logvar
 
+class ConvCausalEncoder_NoComp(nn.Module):
+    def __init__(self,
+                 input_emb_width = 272,
+                 hidden_size = 1024,
+                 down_t = 2,
+                 width = 1024,
+                 depth = 3,
+                 dilation_growth_rate = 3,
+                 activation='relu',
+                 norm=None,
+                 latent_dim=16,
+                 clip_range = [-30,20]
+                 ):
+        super().__init__()
+        self.clip_range = clip_range
+
+        blocks = []
+        stride_t = 1
+        filter_t, pad_t = stride_t * 2, stride_t // 2
+
+        self.in_proj = nn.Linear(input_emb_width, width)
+
+
+        blocks.append(CausalConv1d(width, width, 3, 1, 1))
+        blocks.append(nn.ReLU())
+        
+        for i in range(down_t):   
+            input_dim = width
+            block = nn.Sequential(
+                CausalConv1d(input_dim, width, filter_t, stride_t, 1),
+                CausalResnet1D(width, depth, dilation_growth_rate, activation=activation, norm=norm),
+            )
+            blocks.append(block)
+        blocks.append(CausalConv1d(width, hidden_size, 3, 1, 1))
+        self.model = nn.Sequential(*blocks)
+
+        self.proj = nn.Linear(hidden_size, latent_dim*2)
+
+
+
+    def forward(self, x):
+        x = self.in_proj(x)
+        x = x.transpose(1, 2) 
+        x = self.model(x)
+        x = x.transpose(1, 2) 
+        x = self.proj(x)        
+        mu, logvar = x.chunk(2, dim=2)             
+        logvar = torch.clamp(logvar, self.clip_range[0], self.clip_range[1])
+        # z = self.reparameterize(mu, logvar) 
+
+        # return z, mu, logvar
+        return mu, logvar
+
 class ConvCausalDecoder(nn.Module):
     def __init__(self,
                  input_emb_width = 272,

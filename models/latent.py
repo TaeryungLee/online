@@ -1,6 +1,6 @@
 import torch.nn as nn
 from models.causal_cnn import CausalEncoder, CausalDecoder
-from models.enc_dec import ConvCausalEncoder, ConvCausalDecoder, LocalCausalDecoder, MLPEncoder, DecoderConfig
+from models.enc_dec import ConvCausalEncoder, ConvCausalDecoder, LocalCausalDecoder, MLPEncoder, DecoderConfig, ConvCausalEncoder_NoComp
 import torch
 
 
@@ -81,23 +81,27 @@ class Causal_TAE(nn.Module):
 
 class LatentSpaceVAE(nn.Module):
     def __init__(self,
-                 hidden_size=1024,
-                 depth=12,
-                 n_heads=8,
-                 attn_window=16,
-                 activation='relu',
-                 norm=None,
-                 latent_dim=16,
-                 clip_range = []
-                 ):
+        cfg,
+        hidden_size=1024,
+        depth=12,
+        n_heads=8,
+        attn_window=16,
+        activation='relu',
+        norm=None,
+        latent_dim=16,
+        clip_range = []
+    ):
         
         super().__init__()
 
-        self.encoder = MLPEncoder(272, latent_dim, hidden_size, depth, expand=4, act=activation, dropout=0.1, norm=norm, layerscale_init=1e-5, final_norm=True, clip_range=clip_range)
+        if cfg.encoder == 'mlp':
+            self.encoder = MLPEncoder(272, latent_dim, hidden_size, depth, expand=4, act=activation, dropout=0.1, norm=norm, layerscale_init=1e-5, final_norm=True, clip_range=clip_range)
+        elif cfg.encoder == 'conv1d':
+            self.encoder = ConvCausalEncoder_NoComp(272, hidden_size, cfg.down_t, hidden_size, 3, cfg.dilation_growth_rate, activation=activation, norm=norm, latent_dim=latent_dim, clip_range=clip_range)
         
         cfg = DecoderConfig(
-            d_model=hidden_size, n_heads=n_heads, depth=depth, attn_window=16, rope_fraction=1.0,
-            dropout=0.1, mlp_expand=4
+            d_model=hidden_size, n_heads=n_heads, depth=depth, attn_window=attn_window, rope_fraction=1.0,
+            dropout=0.1, mlp_expand=4, final_norm=True, bias=True
         )
 
         self.decoder = LocalCausalDecoder(latent_dim, 272, cfg)

@@ -122,9 +122,9 @@ for nb_iter in range(1, args.warm_up_iter):
 avg_recons, avg_kl, avg_root = 0., 0., 0.
 
 if args.num_gpus > 1:
-    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net.module, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
+    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, os.path.join(args.out_dir, str(nb_iter)), val_loader, net.module, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
 else:
-    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
+    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
 
 for nb_iter in range(1, args.total_iter + 1):
     
@@ -170,6 +170,6 @@ for nb_iter in range(1, args.total_iter + 1):
 
     if nb_iter % args.eval_iter==0:
         if args.num_gpus > 1:
-            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net.module, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)
+            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, os.path.join(args.out_dir, str(nb_iter)), val_loader, net.module, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)
         else:
-            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)
+            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)

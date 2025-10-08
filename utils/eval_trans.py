@@ -153,7 +153,7 @@ def evaluation_tae_single(out_dir, val_loader, net, logger, writer, evaluator, d
 
 # Multi-GPU evaluation of Causal TAE (training time)
 @torch.no_grad()        
-def evaluation_tae_multi(out_dir, val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, draw = True, save = True, savegif = True, device=torch.device('cuda'), accelerator=None, evaluator=None): 
+def evaluation_tae_multi(out_dir, vis_dir, val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, draw = True, save = True, savegif = True, device=torch.device('cuda'), accelerator=None, evaluator=None): 
     net.eval()
     nb_sample = 0
     
@@ -204,8 +204,8 @@ def evaluation_tae_multi(out_dir, val_loader, net, logger, writer, nb_iter, best
                 num_poses += pose_xyz.shape[0]
 
                 if draw and i < 3:
-                    visualize_smpl_85(recover_from_local_rotation(pose.squeeze(0), num_joints), smpl_model, title='', output_path=out_dir, name=f'gt_{i}')
-                    visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=out_dir, name=f'pred_{i}')
+                    visualize_smpl_85(recover_from_local_rotation(pose.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'gt_{i}')
+                    visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'pred_{i}')
                 else:
                     draw = False
 

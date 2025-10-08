@@ -28,6 +28,8 @@ def get_args_parser():
     parser.add_argument("--down-t", type=int, default=2, help="downsampling rate")
     parser.add_argument("--stride-t", type=int, default=2, help="stride size")
     parser.add_argument("--dilation-growth-rate", type=int, default=3, help="dilation growth rate")
+    parser.add_argument("--width", type=int, default=1024, help="width")
+    parser.add_argument("--encoder", type=str, default='mlp', help="encoder")
 
 
     ## resume
