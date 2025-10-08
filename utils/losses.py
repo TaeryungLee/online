@@ -24,7 +24,7 @@ class ReConsLoss(nn.Module):
     
     
     def forward_KL(self, mu, logvar):
-        loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=(1, 2))
+        loss =  0.5 * (mu.pow(2) + logvar.exp() - logvar - 1)
         return loss.mean()
     
     def forward_root(self, motion_pred, motion_gt):

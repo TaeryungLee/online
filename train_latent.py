@@ -117,7 +117,7 @@ for nb_iter in range(1, args.warm_up_iter):
 
     loss_kl = Loss.forward_KL(mu, logvar)
     loss_root = Loss.forward_root(pred_motion, gt_motion)
-    loss = loss_motion + loss_kl + args.root_loss * loss_root
+    loss = loss_motion + loss_kl*args.kl_loss + args.root_loss * loss_root
 
     optimizer.zero_grad()
     loss.backward()
@@ -142,9 +142,9 @@ avg_recons, avg_kl, avg_root = 0., 0., 0.
 
 
 if args.num_gpus > 1:
-    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, val_loader, net.module, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
+    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net.module, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
 else:
-    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, val_loader, net, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
+    best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
 
 for nb_iter in range(1, args.total_iter + 1):
     
@@ -190,6 +190,6 @@ for nb_iter in range(1, args.total_iter + 1):
 
     if nb_iter % args.eval_iter==0:
         if args.num_gpus > 1:
-            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, val_loader, net.module, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)
+            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net.module, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)
         else:
-            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(args.out_dir, val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)
+            best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_tae_multi(os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, device=comp_device)

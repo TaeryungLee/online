@@ -49,7 +49,7 @@ def get_args_parser():
     parser.add_argument('--vis-gt', action='store_true', help='whether visualize GT motions')
     parser.add_argument('--nb-vis', default=20, type=int, help='nb of visualizations')
     parser.add_argument('--root_loss', default=7.0, type=float, help='root loss')
-    parser.add_argument('--kl', default=1e-5, type=float, help='kl loss')
+    parser.add_argument('--kl_loss', default=1e-4, type=float, help='kl loss')
     parser.add_argument('--latent_dim', default=16, type=int, help='latent dimension')
     parser.add_argument('--hidden_size', default=1024, type=int, help='hidden size')
     parser.add_argument('--nb_joints', default=22, type=int, help='number of joints')
