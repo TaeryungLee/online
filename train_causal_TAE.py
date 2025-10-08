@@ -143,8 +143,6 @@ for nb_iter in range(1, args.total_iter + 1):
     loss_root = Loss.forward_root(pred_motion, gt_motion)
     loss = loss_motion + loss_kl + args.root_loss * loss_root
     
-    breakpoint()
-    
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()

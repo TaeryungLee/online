@@ -25,6 +25,10 @@ def get_args_parser():
     parser.add_argument("--attn-window", type=int, default=16, help="attention window")
     parser.add_argument("--n-heads", type=int, default=8, help="number of heads")
 
+    parser.add_argument("--down-t", type=int, default=2, help="downsampling rate")
+    parser.add_argument("--stride-t", type=int, default=2, help="stride size")
+    parser.add_argument("--dilation-growth-rate", type=int, default=3, help="dilation growth rate")
+
 
     ## resume
     parser.add_argument("--resume-pth", type=str, default=None, help='resume pth for causal TAE')
@@ -45,6 +49,7 @@ def get_args_parser():
     parser.add_argument('--vis-gt', action='store_true', help='whether visualize GT motions')
     parser.add_argument('--nb-vis', default=20, type=int, help='nb of visualizations')
     parser.add_argument('--root_loss', default=7.0, type=float, help='root loss')
+    parser.add_argument('--kl', default=1e-5, type=float, help='kl loss')
     parser.add_argument('--latent_dim', default=16, type=int, help='latent dimension')
     parser.add_argument('--hidden_size', default=1024, type=int, help='hidden size')
     parser.add_argument('--nb_joints', default=22, type=int, help='number of joints')

@@ -18,7 +18,7 @@ class ReConsLoss(nn.Module):
     def forward(self, motion_pred, motion_gt) : 
         """Optimal sigma VAE loss, see https://arxiv.org/pdf/2006.13202 for more details"""
         log_sigma = ((motion_gt[..., :self.motion_dim] - motion_pred[..., :self.motion_dim]) ** 2).mean([0,1,2], keepdim=True).sqrt().log()
-        log_sigma = self.softclip(log_sigma, -6)
+        log_sigma = self.softclip(log_sigma, -4)
         loss = self.gaussian_nll(motion_pred[..., :self.motion_dim], log_sigma, motion_gt[..., :self.motion_dim]).sum()
         return loss
     

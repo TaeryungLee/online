@@ -437,12 +437,12 @@ class LocalCausalDecoder(nn.Module):
         x = self.out_norm(x)
         x = self.out_proj(x)
 
-        x_root = x[:, :, :6]
-        x_pose = x[:, :, 6:]
-        x_root = self.root_norm(x_root)
-        scale, shift = self.root_scale_shift(x_root).chunk(2, dim=-1)
-        x_pose = x_pose * scale + shift
-        x = torch.cat([x_root, x_pose], dim=-1)
+        # x_root = x[:, :, :6]
+        # x_pose = x[:, :, 6:]
+        # x_root = self.root_norm(x_root)
+        # scale, shift = self.root_scale_shift(x_root).chunk(2, dim=-1)
+        # x_pose = x_pose * scale + shift
+        # x = torch.cat([x_root, x_pose], dim=-1)
 
         return x
 

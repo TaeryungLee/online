@@ -55,7 +55,7 @@ val_loader = dataset_eval_tae.DATALoader(args.dataname, False,
                                         unit_length=args.unit_length)
 
 ##### ---- Network ---- #####
-clip_range = [-30,20]
+clip_range = [-6, 6]
 
 # net = tae.Causal_HumanTAE(
 #                        hidden_size=args.hidden_size,
