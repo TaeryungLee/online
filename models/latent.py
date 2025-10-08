@@ -1,6 +1,6 @@
 import torch.nn as nn
 from models.causal_cnn import CausalEncoder, CausalDecoder
-from models.enc_dec import ConvCausalEncoder, ConvCausalDecoder, LocalCausalDecoder, MLPEncoder, DecoderConfig, ConvCausalEncoder_NoComp
+from models.enc_dec import ConvCausalEncoder, ConvCausalDecoder, LocalCausalDecoder, MLPEncoder, DecoderConfig, ConvCausalEncoder_NoComp, LocalCausalEncoder
 import torch
 
 
@@ -94,20 +94,19 @@ class LatentSpaceVAE(nn.Module):
         
         super().__init__()
 
-        if cfg.encoder == 'mlp':
-            self.encoder = MLPEncoder(272, latent_dim, hidden_size, depth, expand=4, act=activation, dropout=0.1, norm=norm, layerscale_init=1e-5, final_norm=True, clip_range=clip_range)
-        elif cfg.encoder == 'conv1d':
-            self.encoder = ConvCausalEncoder_NoComp(272, hidden_size, cfg.down_t, hidden_size, 3, cfg.dilation_growth_rate, activation=activation, norm=norm, latent_dim=latent_dim, clip_range=clip_range)
-        
-        cfg = DecoderConfig(
+        transformer_config = DecoderConfig(
             d_model=hidden_size, n_heads=n_heads, depth=depth, attn_window=attn_window, rope_fraction=1.0,
             dropout=0.1, mlp_expand=4, final_norm=True, bias=True
         )
 
-        self.decoder = LocalCausalDecoder(latent_dim, 272, cfg)
-
-        # self.tae = Causal_TAE(hidden_size, down_t, stride_t, hidden_size, depth, dilation_growth_rate, activation=activation, norm=norm, latent_dim=latent_dim, clip_range=clip_range)
-
+        if cfg.encoder == 'mlp':
+            self.encoder = MLPEncoder(272, latent_dim, hidden_size, depth, expand=4, act=activation, dropout=0.1, norm=norm, layerscale_init=1e-5, final_norm=True, clip_range=clip_range)
+        elif cfg.encoder == 'conv1d':
+            self.encoder = ConvCausalEncoder_NoComp(272, hidden_size, cfg.down_t, hidden_size, 3, cfg.dilation_growth_rate, activation=activation, norm=norm, latent_dim=latent_dim, clip_range=clip_range)
+        elif cfg.encoder == 'transformer':
+            self.encoder = LocalCausalEncoder(272, latent_dim, transformer_config, clip_range=clip_range)
+        
+        self.decoder = LocalCausalDecoder(latent_dim, 272, transformer_config)
 
 
     def reparameterize(self, mu, logvar):

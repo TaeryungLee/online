@@ -447,7 +447,7 @@ class DecoderConfig:
     bias: bool = True
 
 
-class DecoderBlock(nn.Module):
+class LocalCausalBlock(nn.Module):
     def __init__(self, cfg: DecoderConfig):
         super().__init__()
         self.ln1 = nn.LayerNorm(cfg.d_model)
@@ -475,7 +475,7 @@ class LocalCausalDecoder(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.in_proj = nn.Linear(d_in, cfg.d_model, bias=cfg.bias)
-        self.blocks = nn.ModuleList([DecoderBlock(cfg) for _ in range(cfg.depth)])
+        self.blocks = nn.ModuleList([LocalCausalBlock(cfg) for _ in range(cfg.depth)])
         self.out_norm = nn.LayerNorm(cfg.d_model) if cfg.final_norm else nn.Identity()
         self.out_proj = nn.Linear(cfg.d_model, d_out, bias=cfg.bias)
         self.root_norm = nn.LayerNorm(6)
@@ -499,4 +499,26 @@ class LocalCausalDecoder(nn.Module):
 
         return x
 
+EncoderConfig = DecoderConfig
 
+
+class LocalCausalEncoder(nn.Module):
+    def __init__(self, d_in: int, d_out: int, cfg: EncoderConfig = EncoderConfig(), clip_range = [-30,20]):
+        super().__init__()
+        self.cfg = cfg
+        self.clip_range = clip_range
+        self.in_proj = nn.Linear(d_in, cfg.d_model, bias=cfg.bias)
+        self.blocks = nn.ModuleList([LocalCausalBlock(cfg) for _ in range(cfg.depth)])
+        self.out_norm = nn.LayerNorm(cfg.d_model) if cfg.final_norm else nn.Identity()
+        self.out_proj = nn.Linear(cfg.d_model, d_out * 2, bias=cfg.bias)
+        nn.init.zeros_(self.out_proj.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.in_proj(x)
+        for blk in self.blocks:
+            x = blk(x)
+        x = self.out_norm(x)
+        x = self.out_proj(x)
+        mu, logvar = x.chunk(2, dim=-1)
+        logvar = torch.clamp(logvar, self.clip_range[0], self.clip_range[1])
+        return mu, logvar

@@ -31,4 +31,5 @@ CUDA_VISIBLE_DEVICES=1 python train_latent.py --hidden_size 512 --depth 16 --lat
 CUDA_VISIBLE_DEVICES=0 python train_latent.py --hidden_size 512 --depth 16 --latent_dim 64 --exp-name latent_depth16_dim64_win16 --dataname t2m_272 --num_gpus 1 --activation gelu --norm ln --attn-window 16 --n-heads 8 --kl_loss 1e-4
 CUDA_VISIBLE_DEVICES=1 python train_causal_TAE.py --exp-name causal_TAE --kl_loss 1e-4
 CUDA_VISIBLE_DEVICES=2 python train_latent.py --hidden_size 512 --depth 16 --latent_dim 64 --exp-name conv1d_encoder --dataname t2m_272 --num_gpus 1 --activation gelu --norm ln --attn-window 16 --n-heads 8 --kl_loss 1e-4 --encoder conv1d
+CUDA_VISIBLE_DEVICES=3 python train_latent.py --hidden_size 512 --depth 16 --latent_dim 64 --exp-name transformer_encoder --dataname t2m_272 --num_gpus 1 --activation gelu --norm ln --attn-window 16 --n-heads 8 --kl_loss 1e-4 --encoder transformer
 
