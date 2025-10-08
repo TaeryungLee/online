@@ -141,7 +141,7 @@ for nb_iter in range(1, args.total_iter + 1):
     loss_kl = Loss.forward_KL(mu, logvar)
  
     loss_root = Loss.forward_root(pred_motion, gt_motion)
-    loss = loss_motion + loss_kl + args.root_loss * loss_root
+    loss = loss_motion + loss_kl*args.kl_loss + args.root_loss * loss_root
     
     optimizer.zero_grad()
     loss.backward()
