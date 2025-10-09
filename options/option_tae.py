@@ -56,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--hidden_size', default=1024, type=int, help='hidden size')
     parser.add_argument('--nb_joints', default=22, type=int, help='number of joints')
     parser.add_argument('--num_gpus', default=1, type=int, help='number of GPUs')
-    parser.add_argument('--vel_loss', default=0.1, type=float, help='vel loss')
-    parser.add_argument('--acc_loss', default=0.05, type=float, help='acc loss')
+    parser.add_argument('--vel_loss', default=0.0, type=float, help='vel loss')
+    parser.add_argument('--acc_loss', default=0.0, type=float, help='acc loss')
     
     return parser.parse_args()
