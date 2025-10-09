@@ -129,6 +129,8 @@ def DATALoader(dataset_name,
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
+                                              pin_memory=True,
+                                              persistent_workers=True,
                                               drop_last = True)
     
     return train_loader
