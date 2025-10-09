@@ -9,7 +9,23 @@ import torch.nn.functional as F
 
 
 
+class Conv1D_MLP_causal(nn.Module):
+    def __init__(self, d_in, d_out, mlp_hidden_times, resid_pdrop=0.1):
+        super().__init__()
+        self.conv1 = CausalConv1d(in_channels=d_in, out_channels=int(mlp_hidden_times * d_in), kernel_size=3, stride=1)
+        self.act = nn.GELU()
+        self.conv2 = CausalConv1d(in_channels=int(mlp_hidden_times * d_in), out_channels=d_out, kernel_size=3, stride=1)
+        self.dropout = nn.Dropout(resid_pdrop)
 
+    def forward(self, x):
+        B, T, D = x.shape
+        # x = rearrange(x, 'b t d -> b d t')
+        x = x.transpose(1, 2)
+        x = self.conv2(self.act(self.conv1(x)))
+        x = x.transpose(1, 2)
+        # x = rearrange(x, 'b d t -> b t d')
+        return self.dropout(x)
+    
 
 class CausalConv1d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1):
@@ -471,16 +487,21 @@ class LocalCausalBlock(nn.Module):
 
 
 class LocalCausalDecoder(nn.Module):
-    def __init__(self, d_in: int, d_out: int, cfg: DecoderConfig = DecoderConfig()):
+    def __init__(self, d_in: int, d_out: int, cfg: DecoderConfig = DecoderConfig(), conv_mlp=False):
         super().__init__()
+        self.conv_mlp = conv_mlp
         self.cfg = cfg
         self.in_proj = nn.Linear(d_in, cfg.d_model, bias=cfg.bias)
         self.blocks = nn.ModuleList([LocalCausalBlock(cfg) for _ in range(cfg.depth)])
         self.out_norm = nn.LayerNorm(cfg.d_model) if cfg.final_norm else nn.Identity()
-        self.out_proj = nn.Linear(cfg.d_model, d_out, bias=cfg.bias)
-        self.root_norm = nn.LayerNorm(6)
-        self.root_scale_shift = nn.Linear(6, (d_out-6)*2, bias=cfg.bias)
-        nn.init.zeros_(self.out_proj.bias)
+        
+        if conv_mlp:
+            self.conv_mlp = Conv1D_MLP_causal(cfg.d_model, d_out, 4, resid_pdrop=0.1)
+        else:
+            self.out_proj = nn.Linear(cfg.d_model, d_out, bias=cfg.bias)
+            nn.init.zeros_(self.out_proj.bias)
+        # self.root_norm = nn.LayerNorm(6)
+        # self.root_scale_shift = nn.Linear(6, (d_out-6)*2, bias=cfg.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (B, T, D_in) -> (B, T, D_out)"""
@@ -488,7 +509,10 @@ class LocalCausalDecoder(nn.Module):
         for blk in self.blocks:
             x = blk(x)
         x = self.out_norm(x)
-        x = self.out_proj(x)
+        if self.conv_mlp:
+            x = self.conv_mlp(x)
+        else:
+            x = self.out_proj(x)
 
         # x_root = x[:, :, :6]
         # x_pose = x[:, :, 6:]

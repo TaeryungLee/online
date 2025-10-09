@@ -8,17 +8,24 @@ def get_args_parser():
     parser.add_argument('--dataname', type=str, default='t2m_272', help='dataset directory') 
     parser.add_argument('--seed', default=123, type=int, help='seed for initializing training. ')
     parser.add_argument('--batch_size', default=256, type=int, help='batch size for training. ')
-    parser.add_argument('--latent_dir', type=str, default='latent/', help='latent directory')
+    parser.add_argument('--latent_dir', type=str, default='latents/t2m_latents', help='latent directory')
+    parser.add_argument('--unit_length', type=int, default=1, help='unit length')
+    parser.add_argument('--window-size', type=int, default=64, help='training motion length')
+    
+
     parser.add_argument("--resume-pth", type=str, default=None, help='resume pth for causal TAE')
     parser.add_argument("--resume-trans", type=str, default=None, help='resume gpt pth')
     parser.add_argument('--out-dir', type=str, default='output_GPT_Final/', help='output directory')
     parser.add_argument('--exp-name', type=str, default='exp', help='name of the experiment, will create a file inside out-dir')
+
+    # Latent Model Parameters
     parser.add_argument('--hidden_size', default=1024, type=int, help='hidden size')
     parser.add_argument("--down-t", type=int, default=2, help="downsampling rate")
     parser.add_argument("--stride-t", type=int, default=2, help="stride size")
     parser.add_argument("--depth", type=int, default=3, help="depth of the network")
     parser.add_argument("--dilation-growth-rate", type=int, default=3, help="dilation growth rate")
 
+    # Denoiser Parameters
     parser.add_argument('--num_diffusion_head_layers', type=int, default=9, help='number of diffusion head layers')
     parser.add_argument('--latent_dim', type=int, default=16, help='latent dimension')
     parser.add_argument('--total_iter', type=int, default=100000, help='total iteration')

@@ -8,7 +8,7 @@ import json
 from models.latent import LatentSpaceVAE
 import options.option_tae as option_tae
 import utils.utils_model as utils_model
-from humanml3d_272 import dataset_tae_tokenizer
+from dataloader.dataset_tae_tokenizer import DATALoader
 import warnings
 from tqdm import tqdm
 warnings.filterwarnings('ignore')
@@ -26,7 +26,7 @@ writer = SummaryWriter(args.out_dir)
 logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 ##### ---- Dataloader ---- #####
-train_loader = dataset_tae_tokenizer.DATALoader(args.dataname)
+train_loader = DATALoader(args.dataname, unit_length=args.unit_length)
 
 clip_range = [-6, 6]
 
@@ -42,6 +42,7 @@ net = LatentSpaceVAE(
     clip_range=clip_range
 )
 
+args.resume_pth = os.path.join(args.out_dir, args.resume_pth)
 logger.info('loading checkpoint from {}'.format(args.resume_pth))
 ckpt = torch.load(args.resume_pth, map_location='cpu')
 state_dict = ckpt['net'] if isinstance(ckpt, dict) and 'net' in ckpt else ckpt
@@ -62,5 +63,5 @@ for batch in tqdm(train_loader):
     pose, name = batch
     pose = pose.to(device).float()  # (1, T, 272)
     latent = net.encode(pose).squeeze(0)  # (T, latent_dim)
-    latent = torch.cat([latent, reference_end_latent], dim=0)  # append 4-frame ref
+    # latent = torch.cat([latent, reference_end_latent], dim=0)  # append 4-frame ref
     np.save(pjoin(args.latent_dir, name[0] +'.npy'), latent.detach().cpu().numpy())

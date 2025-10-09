@@ -106,7 +106,7 @@ class LatentSpaceVAE(nn.Module):
         elif cfg.encoder == 'transformer':
             self.encoder = LocalCausalEncoder(272, latent_dim, transformer_config, clip_range=clip_range)
         
-        self.decoder = LocalCausalDecoder(latent_dim, 272, transformer_config)
+        self.decoder = LocalCausalDecoder(latent_dim, 272, transformer_config, cfg.decoder_conv_mlp)
 
 
     def reparameterize(self, mu, logvar):

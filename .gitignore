@@ -6,6 +6,7 @@ Evaluator_272/deps/
 Evaluator_272/experiments/
 Evaluator_272/*.ckpt
 gif
+latents
 
 
 

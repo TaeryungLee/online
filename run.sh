@@ -66,4 +66,6 @@ CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder trans
 CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_vel0.1_acc0.05 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.1 --acc_loss 0.05
 CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_vel0.5_acc0.1 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1
 
+python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win3_dim128_nl6_vel0.5_acc0.5_dec_conv --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.5 --decoder-conv-mlp
 
+python get_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 

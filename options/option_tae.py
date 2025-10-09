@@ -9,7 +9,7 @@ def get_args_parser():
     parser.add_argument('--dataname', type=str, default='t2m_272', help='dataset directory')
     parser.add_argument('--batch-size', default=128, type=int, help='batch size')
     parser.add_argument('--window-size', type=int, default=64, help='training motion length')
-    parser.add_argument('--unit-length', type=int, default=4, help='unit length')
+    parser.add_argument('--unit-length', type=int, default=1, help='unit length')
     ## optimization
     parser.add_argument('--total-iter', default=2000000, type=int, help='number of total iterations to run')
     parser.add_argument('--warm-up-iter', default=1000, type=int, help='number of total iterations for warmup')
@@ -24,6 +24,7 @@ def get_args_parser():
     parser.add_argument("--depth", type=int, default=8, help="depth of the network")
     parser.add_argument("--attn-window", type=int, default=4, help="attention window")
     parser.add_argument("--n-heads", type=int, default=8, help="number of heads")
+    parser.add_argument("--decoder-conv-mlp", action='store_true', help='whether use conv mlp for decoder')
 
     parser.add_argument("--down-t", type=int, default=2, help="downsampling rate")
     parser.add_argument("--stride-t", type=int, default=2, help="stride size")

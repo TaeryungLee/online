@@ -22,13 +22,13 @@ class MotionDataset(data.Dataset):
             self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.meta_dir = pjoin(self.data_root, 'mean_std')
-            split_file = pjoin(self.data_root, 'split', 'train.txt')
+            split_file = pjoin(self.data_root, 'split', 'all.txt')
 
         elif dataset_name == 't2m_babel_272':
             # HumanML3D-272 data dir
             self.hml_data_root = './data/humanml3d_272'
             self.hml_motion_dir = pjoin(self.hml_data_root, 'motion_data')
-            hml_split_file = pjoin(self.hml_data_root, 'split', 'train.txt')
+            hml_split_file = pjoin(self.hml_data_root, 'split', 'all.txt')
 
             # Babel-272-stream data dir
             self.babel_stream_data_root = './data/babel_272_stream'

@@ -16,9 +16,10 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 1, latent_dir=None):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64):
         
         self.max_length = 64
+        self.window_size = window_size
         self.pointer = 0
         self.dataset_name = dataset_name
         self.unit_length = unit_length
@@ -75,7 +76,7 @@ class Text2MotionDataset(data.Dataset):
                         if int(f_tag*fps/unit_length) < int(to_tag*fps/unit_length):
                             m_token_list_new = [m_token_list[int(f_tag*fps/unit_length) : int(to_tag*fps/unit_length)]] 
 
-                        if len(m_token_list_new) == 0:
+                        if len(m_token_list_new) < self.window_size:
                             continue
 
                         new_name = '%s_%f_%f'%(name, f_tag, to_tag)
@@ -105,27 +106,33 @@ class Text2MotionDataset(data.Dataset):
 
         if len(m_tokens.shape) == 3:
             m_tokens = m_tokens.squeeze(0)
-        coin = np.random.choice([False, False, True])
-        if coin:
-            coin2 = np.random.choice([True, False])
-            if coin2:
-                m_tokens = m_tokens[:-1]
-            else:
-                m_tokens = m_tokens[1:]
-        m_tokens_len = m_tokens.shape[0]
+        # coin = np.random.choice([False, False, True])
+        # if coin:
+        #     coin2 = np.random.choice([True, False])
+        #     if coin2:
+        #         m_tokens = m_tokens[:-1]
+        #     else:
+        #         m_tokens = m_tokens[1:]
+        # m_tokens_len = m_tokens.shape[0]
+        # if m_tokens_len < self.max_motion_length:
+        #     m_tokens = np.concatenate([m_tokens, np.zeros((self.max_motion_length-m_tokens_len, m_tokens.shape[1]), dtype=int)], axis=0)
         
-        if m_tokens_len < self.max_motion_length:
-            m_tokens = np.concatenate([m_tokens, np.zeros((self.max_motion_length-m_tokens_len, m_tokens.shape[1]), dtype=int)], axis=0)
-        return caption, m_tokens, m_tokens_len
+        idx = random.randint(0, len(m_tokens) - self.window_size)
+        m_tokens = m_tokens[idx:idx+self.window_size]
+        m_tokens_len = self.window_size
+
+        return caption, m_tokens, m_tokens_len, idx
 
 
 
 
 def DATALoader(dataset_name,
-                batch_size, latent_dir, unit_length=4,
+                batch_size, latent_dir, 
+                unit_length=4,
+                window_size=64,
                 num_workers = 8) : 
 
-    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length),
+    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size),
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
