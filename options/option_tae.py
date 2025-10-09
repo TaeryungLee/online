@@ -21,8 +21,8 @@ def get_args_parser():
     parser.add_argument('--weight-decay', default=0.0, type=float, help='weight decay')
     parser.add_argument('--activation', type=str, default='gelu', help='activation function')
     parser.add_argument('--norm', type=str, default='ln', help='normalization function')
-    parser.add_argument("--depth", type=int, default=3, help="depth of the network")
-    parser.add_argument("--attn-window", type=int, default=16, help="attention window")
+    parser.add_argument("--depth", type=int, default=8, help="depth of the network")
+    parser.add_argument("--attn-window", type=int, default=4, help="attention window")
     parser.add_argument("--n-heads", type=int, default=8, help="number of heads")
 
     parser.add_argument("--down-t", type=int, default=2, help="downsampling rate")
@@ -52,9 +52,11 @@ def get_args_parser():
     parser.add_argument('--nb-vis', default=20, type=int, help='nb of visualizations')
     parser.add_argument('--root_loss', default=7.0, type=float, help='root loss')
     parser.add_argument('--kl_loss', default=1e-4, type=float, help='kl loss')
-    parser.add_argument('--latent_dim', default=16, type=int, help='latent dimension')
+    parser.add_argument('--latent_dim', default=128, type=int, help='latent dimension')
     parser.add_argument('--hidden_size', default=1024, type=int, help='hidden size')
     parser.add_argument('--nb_joints', default=22, type=int, help='number of joints')
     parser.add_argument('--num_gpus', default=1, type=int, help='number of GPUs')
+    parser.add_argument('--vel_loss', default=0.1, type=float, help='vel loss')
+    parser.add_argument('--acc_loss', default=0.05, type=float, help='acc loss')
     
     return parser.parse_args()

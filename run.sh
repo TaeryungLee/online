@@ -48,3 +48,22 @@ CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder trans
 CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim64_nl8 --hidden_size 512 --depth 8 --latent_dim 64 --attn-window 4 --n-heads 8 --kl_loss 1e-4 
 CUDA_VISIBLE_DEVICES=3 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 
 
+
+# anchor
+python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win3_dim128_nl8 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win2_dim128_nl8 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 2 --n-heads 8 --kl_loss 1e-4
+CUDA_VISIBLE_DEVICES=2 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl6 --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_kl5e-4 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 5e-4
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_kl5e-5 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 5e-5
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_kl1e-5 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-5
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_vel0.05_acc0.01 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.05 --acc_loss 0.01
+
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_vel0.1_acc0.05 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.1 --acc_loss 0.05
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8_vel0.5_acc0.1 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1
+
+

@@ -3,6 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+
+def charbonnier(x, eps=1e-4):
+    return torch.sqrt(x**2 + eps**2)
+
 class ReConsLoss(nn.Module):
     def __init__(self, motion_dim=272):
         super(ReConsLoss, self).__init__()
@@ -26,6 +30,26 @@ class ReConsLoss(nn.Module):
     def forward_KL(self, mu, logvar):
         loss =  0.5 * (mu.pow(2) + logvar.exp() - logvar - 1)
         return loss.mean()
+
+    def forward_vel_loss(self, motion_pred, motion_gt):
+        pose_slice = slice(8, None)
+
+        d1_pred = motion_pred[:, 1:, pose_slice] - motion_pred[:, :-1, pose_slice]
+        d1_gt = motion_gt[:, 1:, pose_slice] - motion_gt[:, :-1, pose_slice]
+
+        vel_loss = charbonnier(d1_pred - d1_gt).mean()
+        return vel_loss
+
+    def forward_acc_loss(self, motion_pred, motion_gt):
+        pose_slice = slice(8, None)
+
+        d2_pred = motion_pred[:, 2:, pose_slice] - 2 * motion_pred[:, 1:-1, pose_slice] + motion_pred[:, :-2, pose_slice]
+        d2_gt = motion_gt[:, 2:, pose_slice] - 2 * motion_gt[:, 1:-1, pose_gt]
+
+        w = torch.exp(-3.0 * d2_gt.pow(2).mean(dim=-1, keepdim=True))
+
+        acc_loss = (w * charbonnier(d2_pred)).mean()
+        return acc_loss
     
     def forward_root(self, motion_pred, motion_gt):
         """[..., :8] relate to the root joint"""
