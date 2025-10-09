@@ -16,7 +16,7 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 4, latent_dir=None):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None):
         
         self.max_length = 64
         self.pointer = 0
@@ -28,7 +28,7 @@ class Text2MotionDataset(data.Dataset):
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             fps = 30
-            self.max_motion_length = 78   
+            self.max_motion_length = 78 * 4 // unit_length
             dim_pose = 272
             split_file = pjoin(self.data_root, 'split', 'train.txt')
 

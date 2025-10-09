@@ -14,7 +14,7 @@ def collate_fn(batch):
 
 
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 4, latent_dir=None):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None):
         
         self.max_length = 64
         self.pointer = 0
@@ -26,7 +26,7 @@ class Text2MotionDataset(data.Dataset):
             self.babel_stream_data_root = './data/babel_272_stream' 
             self.babel_stream_text_dir = pjoin(self.babel_stream_data_root, 'train_stream_text')
             fps = 30
-            self.max_motion_length = 78
+            self.max_motion_length = 78 * 4 // unit_length
 
             # HumanML3D-272 data dir
             self.hml_data_root = './data/humanml3d_272'
