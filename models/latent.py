@@ -82,7 +82,7 @@ class Causal_TAE(nn.Module):
 class LatentSpaceVAE(nn.Module):
     def __init__(self,
         cfg,
-        hidden_size=1024,
+        hidden_size=512,
         depth=12,
         n_heads=8,
         attn_window=16,
