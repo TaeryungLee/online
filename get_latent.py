@@ -52,9 +52,9 @@ net.to(device)
 
 
 ##### ---- get reference end latent ---- #####
-reference_end_pose = torch.zeros(1, 4, 272).to(device)   # impossible pose prior
-reference_end_latent = net.encode(reference_end_pose).squeeze(0)  # (4, latent_dim)
-np.save(f'reference_end_latent_{args.dataname}.npy', reference_end_latent.detach().cpu().numpy())
+# reference_end_pose = torch.zeros(1, 4, 272).to(device)   # impossible pose prior
+# reference_end_latent = net.encode(reference_end_pose).squeeze(0)  # (4, latent_dim)
+# np.save(f'reference_end_latent_{args.dataname}.npy', reference_end_latent.detach().cpu().numpy())
 
 os.makedirs(args.latent_dir, exist_ok = True)
 
