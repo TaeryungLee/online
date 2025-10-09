@@ -5,7 +5,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from os.path import join as pjoin
 import json
-import models.tae as tae
+from models.latent import LatentSpaceVAE
 import options.option_tae as option_tae
 import utils.utils_model as utils_model
 from humanml3d_272 import dataset_tae_tokenizer
@@ -28,40 +28,39 @@ logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 ##### ---- Dataloader ---- #####
 train_loader = dataset_tae_tokenizer.DATALoader(args.dataname)
 
-clip_range = [-30,20]
+clip_range = [-6, 6]
 
-net = tae.Causal_HumanTAE(
-                       hidden_size=args.hidden_size,
-                       down_t=args.down_t,
-                       stride_t=args.stride_t,
-                       depth=args.depth,
-                       dilation_growth_rate=args.dilation_growth_rate,
-                       activation='relu',
-                       latent_dim=args.latent_dim,
-                       clip_range=clip_range
-                       )
+net = LatentSpaceVAE(
+    cfg=args,
+    hidden_size=args.hidden_size,
+    depth=args.depth,
+    attn_window=args.attn_window,
+    n_heads=args.n_heads,
+    activation=args.activation,
+    norm=args.norm,
+    latent_dim=args.latent_dim,
+    clip_range=clip_range
+)
 
 logger.info('loading checkpoint from {}'.format(args.resume_pth))
 ckpt = torch.load(args.resume_pth, map_location='cpu')
-net.load_state_dict(ckpt['net'], strict=True)
+state_dict = ckpt['net'] if isinstance(ckpt, dict) and 'net' in ckpt else ckpt
+net.load_state_dict(state_dict, strict=True)
 net.eval()
-net.cuda()
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+net.to(device)
 
 
 ##### ---- get reference end latent ---- #####
-reference_end_pose = torch.zeros(1, 4, 272).cuda()   # impossible pose prior
-reference_end_latent, _, _ = net.encode(reference_end_pose)
-reference_end_latent = reference_end_latent.permute(1,0)
-np.save(f'reference_end_latent_{args.dataname}.npy', reference_end_latent.cpu().detach().numpy())
+reference_end_pose = torch.zeros(1, 4, 272).to(device)   # impossible pose prior
+reference_end_latent = net.encode(reference_end_pose).squeeze(0)  # (4, latent_dim)
+np.save(f'reference_end_latent_{args.dataname}.npy', reference_end_latent.detach().cpu().numpy())
 
 os.makedirs(args.latent_dir, exist_ok = True)
 
 for batch in tqdm(train_loader):
     pose, name = batch
-    bs, seq = pose.shape[0], pose.shape[1]
-    pose = pose.cuda().float()
-    latent, _, _  = net.encode(pose)
-    latent = latent.permute(1,0)
-    latent = torch.cat([latent, reference_end_latent], dim=0)
-    latent = latent.cpu().detach().numpy()
-    np.save(pjoin(args.latent_dir, name[0] +'.npy'), latent)
+    pose = pose.to(device).float()  # (1, T, 272)
+    latent = net.encode(pose).squeeze(0)  # (T, latent_dim)
+    latent = torch.cat([latent, reference_end_latent], dim=0)  # append 4-frame ref
+    np.save(pjoin(args.latent_dir, name[0] +'.npy'), latent.detach().cpu().numpy())

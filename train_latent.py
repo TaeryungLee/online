@@ -118,7 +118,7 @@ for nb_iter in range(1, args.warm_up_iter):
 
     loss_kl = Loss.forward_KL(mu, logvar)
     loss_root = Loss.forward_root(pred_motion, gt_motion)
-    loss = loss_motion + loss_kl*args.kl_loss + args.root_loss * loss_root
+    loss = loss_motion + loss_kl * args.kl_loss + args.root_loss * loss_root + args.vel_loss * loss_vel + args.acc_loss * loss_acc
 
     optimizer.zero_grad()
     loss.backward()

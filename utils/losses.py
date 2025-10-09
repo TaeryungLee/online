@@ -44,7 +44,7 @@ class ReConsLoss(nn.Module):
         pose_slice = slice(8, None)
 
         d2_pred = motion_pred[:, 2:, pose_slice] - 2 * motion_pred[:, 1:-1, pose_slice] + motion_pred[:, :-2, pose_slice]
-        d2_gt = motion_gt[:, 2:, pose_slice] - 2 * motion_gt[:, 1:-1, pose_gt]
+        d2_gt = motion_gt[:, 2:, pose_slice] - 2 * motion_gt[:, 1:-1, pose_slice] + motion_gt[:, :-2, pose_slice]
 
         w = torch.exp(-3.0 * d2_gt.pow(2).mean(dim=-1, keepdim=True))
 
