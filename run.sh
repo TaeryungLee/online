@@ -69,3 +69,21 @@ CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder trans
 CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win3_dim128_nl6_vel0.5_acc0.5_dec_conv --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1 --decoder-conv-mlp
 
 python get_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win4_dim128_nl8 --hidden_size 512 --depth 8 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 
+
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win3_dim128_nl6_vel0.5_acc0.1_dec_conv_single --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1 --decoder-conv-mlp
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_272 --encoder transformer --exp-name latent_trans_enc_win3_dim128_nl6_vel0.5_acc0.1 --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1
+
+
+# CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_babel_272 --encoder transformer --exp-name latent_babel_trans_enc_win3_dim128_nl6_vel0.5_acc0.1_dec_conv_single --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1 --decoder-conv-mlp
+# CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_babel_272 --encoder transformer --exp-name latent_babel_trans_enc_win3_dim128_nl6_vel0.5_acc0.1 --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_babel_272 --encoder transformer --exp-name latent_babel_trans_enc_win3_dim128_nl6_vel0.5_acc0.1_dec_conv --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1 --decoder-conv-mlp
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_babel_272 --encoder transformer --exp-name latent_babel_trans_enc_win3_dim128_nl6_vel0.5_acc0.1 --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 3 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1
+
+CUDA_VISIBLE_DEVICES=0 python train_latent.py --dataname t2m_babel_272 --encoder transformer --exp-name latent_babel_trans_enc_win4_dim128_nl6_vel0.5_acc0.1_dec_conv --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1 --decoder-conv-mlp
+CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_babel_272 --encoder transformer --exp-name latent_babel_trans_enc_win4_dim128_nl6_vel0.5_acc0.1 --hidden_size 512 --depth 6 --latent_dim 128 --attn-window 4 --n-heads 8 --kl_loss 1e-4 --vel_loss 0.5 --acc_loss 0.1
+
+
+
+

@@ -512,7 +512,8 @@ class LocalCausalDecoder(nn.Module):
         self.out_norm = nn.LayerNorm(cfg.d_model) if cfg.final_norm else nn.Identity()
         
         if conv_mlp:
-            self.conv_mlp = Conv1D_MLP_causal_single(cfg.d_model, d_out, 4, resid_pdrop=0.1)
+            # self.conv_mlp = Conv1D_MLP_causal_single(cfg.d_model, d_out, 4, resid_pdrop=0.1)
+            self.conv_mlp = Conv1D_MLP_causal(cfg.d_model, d_out, 4, resid_pdrop=0.1)
         else:
             self.out_proj = nn.Linear(cfg.d_model, d_out, bias=cfg.bias)
             nn.init.zeros_(self.out_proj.bias)
