@@ -25,6 +25,22 @@ class Conv1D_MLP_causal(nn.Module):
         x = x.transpose(1, 2)
         # x = rearrange(x, 'b d t -> b t d')
         return self.dropout(x)
+
+class Conv1D_MLP_causal_single(nn.Module):
+    def __init__(self, d_in, d_out, mlp_hidden_times, resid_pdrop=0.1):
+        super().__init__()
+        self.conv1 = CausalConv1d(in_channels=d_in, out_channels=d_out, kernel_size=3, stride=1)
+        self.act = nn.GELU()
+        self.dropout = nn.Dropout(resid_pdrop)
+
+    def forward(self, x):
+        B, T, D = x.shape
+        # x = rearrange(x, 'b t d -> b d t')
+        x = x.transpose(1, 2)
+        x = self.act(self.conv1(x))
+        x = x.transpose(1, 2)
+        # x = rearrange(x, 'b d t -> b t d')
+        return self.dropout(x)
     
 
 class CausalConv1d(nn.Module):
@@ -496,7 +512,7 @@ class LocalCausalDecoder(nn.Module):
         self.out_norm = nn.LayerNorm(cfg.d_model) if cfg.final_norm else nn.Identity()
         
         if conv_mlp:
-            self.conv_mlp = Conv1D_MLP_causal(cfg.d_model, d_out, 4, resid_pdrop=0.1)
+            self.conv_mlp = Conv1D_MLP_causal_single(cfg.d_model, d_out, 4, resid_pdrop=0.1)
         else:
             self.out_proj = nn.Linear(cfg.d_model, d_out, bias=cfg.bias)
             nn.init.zeros_(self.out_proj.bias)
