@@ -1,11 +1,11 @@
 import os
 
 
-# from sentence_transformers import SentenceTransformer
-# t5_model = SentenceTransformer('sentencet5-xxl/')
-# t5_model.eval()
-# for p in t5_model.parameters():
-#     p.requires_grad = False
+from sentence_transformers import SentenceTransformer
+t5_model = SentenceTransformer('sentencet5-xxl/')
+t5_model.eval()
+for p in t5_model.parameters():
+    p.requires_grad = False
 
 text_path_list = ['data/babel_272/texts', 'data/humanml3d_272/texts', 'data/babel_272_stream/train_stream_text', 'data/babel_272_stream/val_stream_text']
 
