@@ -14,8 +14,8 @@ def get_args_parser():
     
 
     parser.add_argument("--resume-pth", type=str, default=None, help='resume pth for causal TAE')
-    parser.add_argument("--resume-trans", type=str, default=None, help='resume gpt pth')
-    parser.add_argument('--out-dir', type=str, default='output_GPT_Final/', help='output directory')
+    parser.add_argument("--resume-denoiser", type=str, default=None, help='resume denoiser pth')
+    parser.add_argument('--out-dir', type=str, default='output/', help='output directory')
     parser.add_argument('--exp-name', type=str, default='exp', help='name of the experiment, will create a file inside out-dir')
 
     # Latent Model Parameters

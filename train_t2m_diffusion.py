@@ -15,6 +15,7 @@ import utils.utils_model as utils_model
 import warnings
 from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
 from models.latent import LatentSpaceVAE
+from models.diffusion_roll import DiffusionRoll
 
 warnings.filterwarnings('ignore')
 
@@ -105,28 +106,30 @@ t5_model.eval()
 for p in t5_model.parameters():
     p.requires_grad = False
 
+breakpoint()
+# config = LLaMAHFConfig.from_name('Normal_size')
+# config.block_size = 78
+# trans_encoder = LLaMAHF(config, args.num_diffusion_head_layers, args.latent_dim, comp_device)
 
-config = LLaMAHFConfig.from_name('Normal_size')
-config.block_size = 78
-trans_encoder = LLaMAHF(config, args.num_diffusion_head_layers, args.latent_dim, comp_device)
+diffusion = DiffusionRoll(args)
 
-if args.resume_trans is not None:
-    print('loading transformer checkpoint from {}'.format(args.resume_trans))
-    ckpt = torch.load(args.resume_trans, map_location='cpu')
-    new_ckpt_trans = {}
-    for key in ckpt['trans'].keys():
+if args.resume_denoiser is not None:
+    print('loading transformer checkpoint from {}'.format(args.resume_denoiser))
+    ckpt = torch.load(args.resume_denoiser, map_location='cpu')
+    new_ckpt_denoiser = {}
+    for key in ckpt['denoiser'].keys():
         if key.split('.')[0]=='module':
             new_key = '.'.join(key.split('.')[1:])
         else:
             new_key = key
-        new_ckpt_trans[new_key] = ckpt['trans'][key]
-    trans_encoder.load_state_dict(new_ckpt_trans, strict=True)
-trans_encoder.train()
-trans_encoder.to(comp_device)
+        new_ckpt_denoiser[new_key] = ckpt['denoiser'][key]
+    diffusion.load_state_dict(new_ckpt_denoiser, strict=True)
+diffusion.train()
+diffusion.to(comp_device)
 
 
 ##### ---- Optimizer & Scheduler ---- #####
-optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, trans_encoder, args.optimizer)
+optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, diffusion, args.optimizer)
 scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.total_iter)
 
 
