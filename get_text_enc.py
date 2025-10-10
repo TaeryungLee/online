@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 
 from sentence_transformers import SentenceTransformer
@@ -26,10 +27,7 @@ for text_path in text_path_list:
                 line_split = line.strip().split('#')
                 caption = line_split[0]
                 text_enc = t5_model.encode(caption)
-                enc_list.append(text_enc)
-            
-            text_enc = np.array(enc_list)
-            np.save(out_file, text_enc)
+                enc_list.append((caption, text_enc))
+        
+            np.save(out_file, enc_list)
             breakpoint()
-
-
