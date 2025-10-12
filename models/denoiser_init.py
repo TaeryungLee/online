@@ -97,7 +97,6 @@ class Block01(nn.Module):
         B, T, C = x.shape
 
         # ----- Self-Attention (causal first, then Norm+AdaLN) -----
-        breakpoint()
         attn_mask = torch.triu(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=1)
         sa_out, _ = self.self_attn(x, x, x, attn_mask=attn_mask)
         x = x + self.dropout(sa_out)
