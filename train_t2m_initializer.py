@@ -240,7 +240,6 @@ while nb_iter <= args.total_iter:
         # Visualization directory for evaluation
         eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
         os.makedirs(eval_vis_dir, exist_ok=True)
-
         best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_single(
             val_loader,
             net,

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from models.enc_dec import Conv1D_MLP_causal
 
 
 class PositionalEncoding(nn.Module):
@@ -85,13 +86,16 @@ class Block01(nn.Module):
         # Feed-forward network
         hidden_multiplier = int(getattr(cfg, "denoiser_ff_mult", 4))
         hidden_dim = hidden_multiplier * latent_dim
-        # TODO: conv mlp
-        self.ff = nn.Sequential(
-            nn.Linear(latent_dim, hidden_dim),
-            nn.GELU() if getattr(cfg, "denoiser_activation", "gelu") == "gelu" else nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, latent_dim)
-        )
+
+        if conv_mlp:
+            self.ff = Conv1D_MLP_causal(latent_dim, latent_dim, hidden_multiplier, resid_pdrop=dropout)
+        else:
+            self.ff = nn.Sequential(
+                nn.Linear(latent_dim, hidden_dim),
+                nn.GELU() if getattr(cfg, "denoiser_activation", "gelu") == "gelu" else nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, latent_dim)
+            )
     
     def forward(self, x, sigma_enc, condition, condition_len, text_timing):
         B, T, C = x.shape

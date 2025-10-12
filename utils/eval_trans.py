@@ -5,6 +5,7 @@ from utils.face_z_align_util import rotation_6d_to_matrix
 import visualization.plot_3d_global as plot_3d
 from utils.recover_visualize import recover_from_local_rotation
 from smplx import SMPL
+from tqdm import tqdm
 import os
 from utils.recover_visualize import visualize_smpl_85
 
@@ -307,38 +308,39 @@ def evaluation_transformer_272_single(
     smpl_model = None
     if draw and vis_dir is not None:
         smpl_model = SMPL(model_path='./human_models/smpl')
-    for batch in val_loader:
-        # Expect from eval dataloader: (text, pose, m_length, caption_enc)
-        # Align with train initializer where diffusion.sample(feat_text, length)
+    for batch in tqdm(val_loader, desc='Evaluating'):
         text, pose, m_length, caption_enc, caption_enc_len = batch
         bs, seq = pose.shape[:2]
         num_joints = 22
         pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).to(device)
         pred_len = torch.ones(bs).long()
         
-        # Ensure caption_enc on device
-        if isinstance(caption_enc, torch.Tensor):
-            caption_enc = caption_enc.to(device)
+        caption_enc, caption_enc_len = caption_enc.to(device), caption_enc_len.to(device)
 
-        for k in range(bs):    
-            cond = caption_enc[k:k+1]
-            length_k = int(m_length[k].item()) if torch.is_tensor(m_length) else int(m_length[k])
-            index_motion = denoiser.sample(cond, caption_enc_len, motion_length=length_k, cfg=cfg)
-            pred_pose = latent_model.forward_decoder(index_motion)            
-            cur_len = pred_pose.shape[1]
-            pred_len[k] = min(cur_len, seq)
-            pred_pose_eval[k:k+1, :cur_len] = pred_pose[:, :seq]
+        # Batched generation: use max target length in batch, then slice
+        motion_length_max = int(m_length.max().item()) if torch.is_tensor(m_length) else int(max(m_length))
+        index_motion = denoiser.sample(caption_enc, caption_enc_len, motion_length=motion_length_max, cfg=cfg)
+        pred_pose = latent_model.forward_decoder(index_motion)  # [B, T, D]
+        # cur_len = pred_pose.shape[1]
+        # fill_len = min(cur_len, seq)
+        # pred_len = torch.full((bs,), fill_len, dtype=torch.long, device=device)
+        # pred_pose_eval[:, :fill_len] = pred_pose[:, :fill_len]
 
-            # Optional visualization (up to first 3 samples)
-            if smpl_model is not None and k < 3:
-                try:
-                    # Denormalize GT and prediction
+        for k in range(bs):
+            pred_pose_eval[k:k+1, :m_length[k]] = pred_pose[k:k+1, :m_length[k]]
+
+        # Optional visualization (up to first 3 samples)
+        if smpl_model is not None:
+            try:
+                for k in range(min(3, bs)):
+                    length_k = int(m_length[k].item()) if torch.is_tensor(m_length) else int(m_length[k])
                     gt_denorm = val_loader.dataset.inv_transform(pose[k:k+1, :length_k, :].detach().cpu().numpy())
-                    pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
+                    pred_denorm = val_loader.dataset.inv_transform(pred_pose[k:k+1, :length_k].detach().cpu().numpy())
                     visualize_smpl_85(recover_from_local_rotation(gt_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'gt_{k}')
                     visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'pred_{k}')
-                except Exception:
-                    pass
+            except Exception:
+                pass
+            draw = False
         et_pred, em_pred = textencoder(text).loc, motionencoder(pred_pose_eval, pred_len).loc
         
         pose = pose.to(device).float()
