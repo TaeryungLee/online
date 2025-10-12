@@ -97,11 +97,12 @@ class Block01(nn.Module):
         B, T, C = x.shape
 
         # ----- Self-Attention (causal first, then Norm+AdaLN) -----
+        breakpoint()
         attn_mask = torch.triu(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=1)
         sa_out, _ = self.self_attn(x, x, x, attn_mask=attn_mask)
         x = x + self.dropout(sa_out)
         x_sa = self.norm_sa(x)
-        gam_beta_sa = self.mod_sa_sigma(sigma_enc)  # [B, 2C]
+        gam_beta_sa = self.mod_sa_sigma(sigma_enc).unsqueeze(1)  # [B, 2C]
         gamma_sa, beta_sa = gam_beta_sa.chunk(2, dim=-1)
         x = x_sa * (1 + gamma_sa) + beta_sa
         

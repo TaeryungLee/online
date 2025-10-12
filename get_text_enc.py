@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import json
-
+from tqdm import tqdm
 
 from sentence_transformers import SentenceTransformer
 t5_model = SentenceTransformer('sentencet5-xxl/')
@@ -20,7 +20,7 @@ for text_path in text_path_list:
 
     text_dict = {}
 
-    for file in os.listdir(text_path):
+    for file in tqdm(os.listdir(text_path)):
         with open(os.path.join(text_path, file), 'r') as f:
             text = f.readlines()
             enc_list = []
@@ -29,10 +29,11 @@ for text_path in text_path_list:
             for i, line in enumerate(text):
                 line_split = line.strip().split('#')
                 caption = line_split[0]
-                text_enc = t5_model.encode(caption, output_value='token_embeddings')
-                out_file = os.path.join(out_path, file.replace('.txt', f'_{i}.npy'))
-                np.save(out_file, enc_list)
+                text_enc = t5_model.encode(caption)
+                enc_list.append(text_enc)
                 text_dict[file.replace('.txt', '')].append(caption)
 
-            breakpoint()
-            json.dump(text_dict, open(os.path.join(out_path, file.replace('.txt', '.json')), 'w'))
+            out_file = os.path.join(out_path, file.replace('.txt', '.npy'))
+            enc_list = np.array(enc_list)
+            np.save(out_file, enc_list)
+
