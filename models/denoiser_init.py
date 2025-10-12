@@ -131,11 +131,10 @@ class Block01(nn.Module):
             x = x_ca * (1 + gamma_ca) + beta_ca
 
         # ----- Feed-Forward + Norm+AdaLN -----
-        
         ff_out = self.ff(x)
         x = x + self.dropout(ff_out)
         x_ff = self.norm_ff(x)
-        gam_beta_ff = self.mod_ff_sigma(sigma_enc)
+        gam_beta_ff = self.mod_ff_sigma(sigma_enc).unsqueeze(1)
         gamma_ff, beta_ff = gam_beta_ff.chunk(2, dim=-1)
         x = x_ff * (1 + gamma_ff) + beta_ff
         

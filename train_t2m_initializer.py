@@ -227,7 +227,6 @@ while nb_iter <= args.total_iter:
     avg_loss = avg_loss + loss.item()
 
     nb_iter += 1
-    args.print_iter = 1
     if nb_iter % args.print_iter ==  0 :
         avg_loss = avg_loss / args.print_iter
         writer.add_scalar('./Loss/train', avg_loss, nb_iter)
@@ -236,7 +235,6 @@ while nb_iter <= args.total_iter:
         logger.info(msg)
         avg_loss = 0.
 
-    args.eval_iter = 1
     if nb_iter % args.eval_iter == 0:
         prev_best_fid_local = best_fid
         # Visualization directory for evaluation
