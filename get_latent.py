@@ -42,7 +42,7 @@ net = LatentSpaceVAE(
     clip_range=clip_range
 )
 
-args.resume_pth = os.path.join(args.out_dir, args.resume_pth)
+# args.resume_pth = os.path.join(args.out_dir, args.resume_pth)
 logger.info('loading checkpoint from {}'.format(args.resume_pth))
 ckpt = torch.load(args.resume_pth, map_location='cpu')
 state_dict = ckpt['net'] if isinstance(ckpt, dict) and 'net' in ckpt else ckpt
