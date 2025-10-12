@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import json
 
 
 from sentence_transformers import SentenceTransformer
@@ -17,17 +18,21 @@ for text_path in text_path_list:
     out_path = text_path.replace('data', 'text_enc')
     os.makedirs(out_path, exist_ok=True)
 
+    text_dict = {}
+
     for file in os.listdir(text_path):
-        out_file = os.path.join(out_path, file.replace('.txt', '.npy'))
         with open(os.path.join(text_path, file), 'r') as f:
             text = f.readlines()
             enc_list = []
+            text_dict[file.replace('.txt', '')] = []
 
-            for line in text:
+            for i, line in enumerate(text):
                 line_split = line.strip().split('#')
                 caption = line_split[0]
-                text_enc = t5_model.encode(caption)
-                enc_list.append((caption, text_enc))
-        
-            np.save(out_file, enc_list)
+                text_enc = t5_model.encode(caption, output_value='token_embeddings')
+                out_file = os.path.join(out_path, file.replace('.txt', f'_{i}.npy'))
+                np.save(out_file, enc_list)
+                text_dict[file.replace('.txt', '')].append(caption)
+
             breakpoint()
+            json.dump(text_dict, open(os.path.join(out_path, file.replace('.txt', '.json')), 'w'))

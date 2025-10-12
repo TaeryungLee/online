@@ -8,5 +8,5 @@ Evaluator_272/*.ckpt
 gif
 latents
 sentencet5-xxl
-
+checkpoints/*
 

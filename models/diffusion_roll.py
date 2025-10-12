@@ -157,6 +157,135 @@ class DiffusionRoll(nn.Module):
 
 
     @torch.no_grad()
+    def stream_rollout(
+        self,
+        condition,
+        init_x0,                  
+        total_frames: int,         # 최종 생성할 총 프레임 수 (>= W 권장)
+        cfg_scale: float = 1.0,
+        num_steps: int = None,
+        heun_churn: float = None,
+        warm_start_noise: float = 1.0,   # 0이면 완전 보존, 1이면 표준 노이즈 주입
+        tail_noise_std: float = 1.0,     # 뒤에 붙일 tail 노이즈 표준편차
+    ):
+        """
+        k//2 프레임씩 윈도우를 뒤로 밀면서 스트리밍 롤아웃.
+        - 각 윈도우는 Heun ODE(EDM) + frame-wise σ 스케줄로 clean을 생성.
+        - 매 루프 후 앞쪽 hop 프레임을 외부로 내보내고, 뒤쪽엔 노이즈 hop 프레임을 덧붙여 다음 윈도우 시작.
+        반환: (long_x0)  (B, C, total_frames, ...)
+        """
+        assert init_x0 is not None, "init_x0 is required."
+        shape = init_x0.shape
+        B = shape[0]
+        T = shape[self.time_dim]
+        assert T == self.W, f"init_x0 time length {T} must equal W {self.W}"
+        device = init_x0.device
+
+        hop = max(self.k // 2, 1)
+        N = int(num_steps or self.num_timesteps)
+        churn = self.heun_churn_default if heun_churn is None else heun_churn
+
+        # 결과 버퍼
+        chunks = []
+        produced = 0
+
+        # 현재 clean 윈도우
+        cur_x0 = init_x0.clone()
+
+        # w 인덱스(프레임별 σ 계산용)
+        w = torch.arange(self.W, device=device, dtype=torch.float32)[None, :]  # [1,W]
+
+        while produced < total_frames:
+            # ---- 1) 현재 윈도우에서 Heun ODE로 다음 clean 윈도우 생성 ----
+            # i=0의 frame-wise σ
+            t0 = torch.zeros(B, device=device)
+            ramp0 = erdm_ramp(t0, w, self.W, self.k)                               # [B,W]
+            sigma0 = edm_sigma_from_ramp(ramp0, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
+            sigma0_map = make_sigma_map(sigma0, cur_x0.shape, self.time_dim)       # [B,1,...,W,...,1]
+
+            # warm-start: init_x0 주변에서 시작
+            if warm_start_noise == 0.0:
+                x = cur_x0.clone()
+            else:
+                eps0 = torch.randn_like(cur_x0)
+                x = cur_x0 + (warm_start_noise * sigma0_map * eps0)
+
+            # Heun 적분
+            for i in range(N - 1):
+                t_i   = torch.full((B,), i / (N - 1),     device=device)
+                t_nxt = torch.full((B,), (i + 1) / (N - 1), device=device)
+
+                ramp_i   = erdm_ramp(t_i,   w, self.W, self.k)                 # [B,W]
+                ramp_nxt = erdm_ramp(t_nxt, w, self.W, self.k)                 # [B,W]
+
+                sigma_i   = edm_sigma_from_ramp(ramp_i,   self.sigma_min, self.sigma_max, self.rho)  # [B,W]
+                sigma_nxt = edm_sigma_from_ramp(ramp_nxt, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
+
+                sb   = make_sigma_map(sigma_i,   cur_x0.shape, self.time_dim)
+                sb_n = make_sigma_map(sigma_nxt, cur_x0.shape, self.time_dim)
+
+                h = (sb_n - sb)
+
+                # Euler
+                x0_c = self.denoiser(x, sb, condition)
+                if cfg_scale != 1.0:
+                    x0_u = self.denoiser(x, sb, None)
+                    x0   = cfg_combine(x0_c, x0_u, cfg_scale)
+                else:
+                    x0 = x0_c
+                d_cur  = ode_drift_from_x0(x, sb, x0)
+                x_eul  = x + h * d_cur
+
+                if i < N - 1:  
+                    # Heun correction
+                    x0_c_n = self.denoiser(x_eul, sb_n, condition)
+                    if cfg_scale != 1.0:
+                        x0_u_n = self.denoiser(x_eul, sb_n, None)
+                        x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg_scale)
+                    else:
+                        x0_n = x0_c_n
+
+                    d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
+                    x = x + 0.5 * h * (d_cur + d_next)
+
+            next_x = x  # σ→0 한계에서 clean 근사
+
+            # 최종 clean 윈도우
+            next_x0 = next_x
+
+            # ---- 2) 앞쪽 hop 프레임을 외부로 배출 ----
+            # 남은 필요 길이만큼 잘라 배출
+            emit_len = min(hop, total_frames - produced)
+            emit_chunk = next_x0.narrow(self.time_dim, 0, emit_len)  # (B,emit_len,C,...)
+            chunks.append(emit_chunk)
+            produced += emit_len
+            if produced >= total_frames:
+                break
+
+            # ---- 3) 윈도우 슬라이드: 앞 hop을 버리고, 뒤에 노이즈 hop 프레임 붙이기 ----
+            # prefix: next_x0[:, :, hop:, ...]  (길이 W - hop)
+            prefix = next_x0.narrow(self.time_dim, hop, self.W - hop)
+            # tail noise clean (B, hop, C, ...)
+            tail_shape = list(next_x0.shape)
+            tail_shape[self.time_dim] = hop
+            tail_noise = torch.randn(tail_shape, device=device) * tail_noise_std
+
+            # 다음 루프의 cur_x0
+            cur_x0 = torch.cat([prefix, tail_noise], dim=self.time_dim)
+
+        # 마지막: 아직 window의 남은 프레임이 있고, total_frames을 채우지 못했다면(보통 위에서 종료됨) 처리
+        # (일반적으로 위 while에서 정확히 채움)
+
+        # 결과 연결
+        long_x0 = torch.cat(chunks, dim=self.time_dim)  # (B, C, total_frames, ...)
+        return long_x0
+
+
+
+
+
+
+    @torch.no_grad()
     def sample(
         self,
         condition,
@@ -246,139 +375,4 @@ class DiffusionRoll(nn.Module):
             x = x + 0.5 * h * (d_cur + d_next)
 
         return x
-
-
-    @torch.no_grad()
-    def stream_rollout(
-        self,
-        condition,
-        init_x0,                   # (B, T, C, ...) 초기 clean 윈도우 (T == self.W)
-        total_frames: int,         # 최종 생성할 총 프레임 수 (>= W 권장)
-        cfg_scale: float = 1.0,
-        num_steps: int = None,
-        heun_churn: float = None,
-        warm_start_noise: float = 1.0,   # 0이면 완전 보존, 1이면 표준 노이즈 주입
-        tail_noise_std: float = 1.0,     # 뒤에 붙일 tail 노이즈 표준편차
-    ):
-        """
-        k//2 프레임씩 윈도우를 뒤로 밀면서 스트리밍 롤아웃.
-        - 각 윈도우는 Heun ODE(EDM) + frame-wise σ 스케줄로 clean을 생성.
-        - 매 루프 후 앞쪽 hop 프레임을 외부로 내보내고, 뒤쪽엔 노이즈 hop 프레임을 덧붙여 다음 윈도우 시작.
-        반환: (long_x0)  (B, C, total_frames, ...)
-        """
-        assert init_x0 is not None, "init_x0 is required."
-        shape = init_x0.shape
-        B = shape[0]
-        T = shape[self.time_dim]
-        assert T == self.W, f"init_x0 time length {T} must equal W {self.W}"
-        device = init_x0.device
-
-        hop = max(self.k // 2, 1)
-        N = int(num_steps or self.num_timesteps)
-        churn = self.heun_churn_default if heun_churn is None else heun_churn
-
-        # 결과 버퍼
-        chunks = []
-        produced = 0
-
-        # 현재 clean 윈도우
-        cur_x0 = init_x0.clone()
-
-        # w 인덱스(프레임별 σ 계산용)
-        w = torch.arange(self.W, device=device, dtype=torch.float32)[None, :]  # [1,W]
-
-        while produced < total_frames:
-            # ---- 1) 현재 윈도우에서 Heun ODE로 다음 clean 윈도우 생성 ----
-            # i=0의 frame-wise σ
-            t0 = torch.zeros(B, device=device)
-            ramp0 = erdm_ramp(t0, w, self.W, self.k)                               # [B,W]
-            sigma0 = edm_sigma_from_ramp(ramp0, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
-            sigma0_map = make_sigma_map(sigma0, cur_x0.shape, self.time_dim)       # [B,1,...,W,...,1]
-
-            # warm-start: init_x0 주변에서 시작
-            if warm_start_noise == 0.0:
-                x = cur_x0.clone()
-            else:
-                eps0 = torch.randn_like(cur_x0)
-                x = cur_x0 + (warm_start_noise * sigma0_map * eps0)
-
-            # Heun 적분
-            for i in range(N - 1):
-                t_i   = torch.full((B,), i / (N - 1),     device=device)
-                t_nxt = torch.full((B,), (i + 1) / (N - 1), device=device)
-
-                ramp_i   = erdm_ramp(t_i,   w, self.W, self.k)                 # [B,W]
-                ramp_nxt = erdm_ramp(t_nxt, w, self.W, self.k)                 # [B,W]
-
-                sigma_i   = edm_sigma_from_ramp(ramp_i,   self.sigma_min, self.sigma_max, self.rho)  # [B,W]
-                sigma_nxt = edm_sigma_from_ramp(ramp_nxt, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
-
-                sb   = make_sigma_map(sigma_i,   cur_x0.shape, self.time_dim)
-                sb_n = make_sigma_map(sigma_nxt, cur_x0.shape, self.time_dim)
-
-                h = (sb_n - sb)
-
-                # churn
-                if churn > 0:
-                    gamma = min(churn, math.sqrt(2) - 1.0)
-                    eps = torch.randn_like(x)
-                    x = x + eps * (sb * gamma)
-                    sb = sb * (1.0 + gamma)
-
-                # Euler
-                x0_c = self.denoiser(x, sb, condition)
-                if cfg_scale != 1.0:
-                    x0_u = self.denoiser(x, sb, None)
-                    x0   = cfg_combine(x0_c, x0_u, cfg_scale)
-                else:
-                    x0 = x0_c
-                d_cur  = ode_drift_from_x0(x, sb, x0)
-                x_eul  = x + h * d_cur
-
-                if i == N - 2:
-                    x = x_eul
-                    break
-
-                # Heun correction
-                x0_c_n = self.denoiser(x_eul, sb_n, condition)
-                if cfg_scale != 1.0:
-                    x0_u_n = self.denoiser(x_eul, sb_n, None)
-                    x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg_scale)
-                else:
-                    x0_n = x0_c_n
-
-                d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
-                x = x + 0.5 * h * (d_cur + d_next)
-
-            next_x = x  # σ→0 한계에서 clean 근사
-
-            # 최종 clean 윈도우
-            next_x0 = next_x
-
-            # ---- 2) 앞쪽 hop 프레임을 외부로 배출 ----
-            # 남은 필요 길이만큼 잘라 배출
-            emit_len = min(hop, total_frames - produced)
-            emit_chunk = next_x0.narrow(self.time_dim, 0, emit_len)  # (B,emit_len,C,...)
-            chunks.append(emit_chunk)
-            produced += emit_len
-            if produced >= total_frames:
-                break
-
-            # ---- 3) 윈도우 슬라이드: 앞 hop을 버리고, 뒤에 노이즈 hop 프레임 붙이기 ----
-            # prefix: next_x0[:, :, hop:, ...]  (길이 W - hop)
-            prefix = next_x0.narrow(self.time_dim, hop, self.W - hop)
-            # tail noise clean (B, hop, C, ...)
-            tail_shape = list(next_x0.shape)
-            tail_shape[self.time_dim] = hop
-            tail_noise = torch.randn(tail_shape, device=device) * tail_noise_std
-
-            # 다음 루프의 cur_x0
-            cur_x0 = torch.cat([prefix, tail_noise], dim=self.time_dim)
-
-        # 마지막: 아직 window의 남은 프레임이 있고, total_frames을 채우지 못했다면(보통 위에서 종료됨) 처리
-        # (일반적으로 위 while에서 정확히 채움)
-
-        # 결과 연결
-        long_x0 = torch.cat(chunks, dim=self.time_dim)  # (B, C, total_frames, ...)
-        return long_x0
 

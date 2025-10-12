@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 from models.denoiser_init import DenoiserInit
+from tqdm import tqdm
 
 # ---------- EDM utilities ----------
 def edm_sigma_from_ramp(ramp, sigma_min=0.002, sigma_max=80.0, rho=7.0):
@@ -42,6 +43,7 @@ class DiffusionInit(nn.Module):
     """Uniform-schedule Diffusion Init (initial x0 generator)"""
     def __init__(self, cfg):
         super().__init__()
+        self.cfg = cfg
         self.denoiser = DenoiserInit(cfg)   # (x_noisy, sigma, condition) -> x0_pred
 
         # schedule / loss params
@@ -49,10 +51,11 @@ class DiffusionInit(nn.Module):
         self.sigma_data    = float(getattr(cfg, "sigma_data", 0.5))
         self.sigma_min     = float(getattr(cfg, "sigma_min", 0.002))
         self.sigma_max     = float(getattr(cfg, "sigma_max", 80.0))
-        self.rho           = float(getattr(cfg, "rho", 7.0))
+        self.rho           = float(getattr(cfg, "rho_init", 7.0))
 
         # optional: small stochasticity (off by default)
-        self.heun_churn    = float(getattr(cfg, "heun_churn", 0.0))
+        self.P_mean     = float(getattr(cfg, "P_mean", -1.2))
+        self.P_std      = float(getattr(cfg, "P_std",  1.2))
 
     # ---------------- TRAIN ----------------
     def forward(self, target, condition):
@@ -65,12 +68,15 @@ class DiffusionInit(nn.Module):
         device = target.device
 
         # t는 추론 격자 {i/(N-1)}에서 샘플 (스케줄 미스매치 제거)
-        N = max(int(self.num_timesteps), 2)
-        idx = torch.randint(low=0, high=N, size=(B,), device=device)      # [B] ∈ {0..N-1}
-        t = idx.to(torch.float32) / (N - 1)                                # [B] ∈ {i/(N-1)}
+        # N = max(int(self.num_timesteps), 2)
+        # idx = torch.randint(low=0, high=N, size=(B,), device=device)      # [B] ∈ {0..N-1}
+        # t = idx.to(torch.float32) / (N - 1)                                # [B] ∈ {i/(N-1)}
 
-        # σ (배치 스칼라) → target과 브로드캐스트
-        sigma = edm_sigma_from_ramp(t, self.sigma_min, self.sigma_max, self.rho)  # [B]
+        # # σ (배치 스칼라) → target과 브로드캐스트
+        # sigma = edm_sigma_from_ramp(t, self.sigma_min, self.sigma_max, self.rho)  # [B]
+
+        rnd = torch.randn(B, 1, 1, 1, device=device)
+        sigma = torch.exp(self.P_mean + self.P_std * rnd).view(B)  # [B]
         sigma_b = sigma.view(B, *([1] * (target.dim() - 1)))                      # [B,1,1,...]
 
         # 노이즈 주입 (VE)
@@ -91,7 +97,7 @@ class DiffusionInit(nn.Module):
     def sample(
         self,
         condition,
-        shape,                 # (B, C, T, ...)
+        motion_length,
         cfg: float = 1.0,
         num_steps: int = None
     ):
@@ -101,30 +107,25 @@ class DiffusionInit(nn.Module):
         - 초기화: σ_0 * N(0,1) (σ_0 = sigma_steps[0])
         """
         device = condition.device if torch.is_tensor(condition) else ("cuda" if torch.cuda.is_available() else "cpu")
-        B = shape[0]
+        B = condition.shape[0]
         N = int(num_steps or self.num_timesteps)
         N = max(N, 2)
+        shape = (B, motion_length, self.cfg.latent_dim)
 
         # σ 스텝 (공유 스칼라 σ; 배치/프레임 전역 동일)
         sigmas = edm_sigma_steps(N, self.sigma_min, self.sigma_max, self.rho, device=device)  # [N]
+        sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1], device=device)])
         sigma0 = sigmas[0].view(1, *([1] * (len(shape) - 1)))                                 # [1,1,1,...]
 
         # 초기 상태
         x = torch.randn(shape, device=device) * sigma0
 
-        for i in range(N - 1):
+        for i in tqdm(range(N), desc="Sampling initial window", leave=False):
             sigma_i   = sigmas[i]
             sigma_next= sigmas[i + 1]
             sb   = sigma_i.view(1, *([1] * (len(shape) - 1)))       # [1,1,1,...]
             sb_n = sigma_next.view(1, *([1] * (len(shape) - 1)))
             h = (sb_n - sb)
-
-            # (옵션) EDM churn (기본 0)
-            if self.heun_churn > 0:
-                gamma = min(self.heun_churn, math.sqrt(2) - 1.0)
-                eps = torch.randn_like(x)
-                x = x + eps * (sb * gamma)
-                sb = sb * (1.0 + gamma)
 
             # Heun 1단계: Euler
             # denoiser의 σ 인자는 배치 스칼라가 필요하므로 [B]로 맞춰서 전달
@@ -135,25 +136,22 @@ class DiffusionInit(nn.Module):
                 x0   = cfg_combine(x0_c, x0_u, cfg)
             else:
                 x0 = x0_c
-
+            # return (x - x0) / sigma.clamp_min(1e-12)
             d_cur = ode_drift_from_x0(x, sb, x0)
             x_eul = x + h * d_cur
+            
+            if i < N - 1:
+                # Heun 보정
+                sigma_batch_n = torch.full((B,), float(sigma_next), device=device)
+                x0_c_n = self.denoiser(x_eul, sigma_batch_n, condition)
+                if cfg != 1.0:
+                    x0_u_n = self.denoiser(x_eul, sigma_batch_n, None)
+                    x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg)
+                else:
+                    x0_n = x0_c_n
 
-            if i == N - 2:
-                x = x_eul
-                break
-
-            # Heun 보정
-            sigma_batch_n = torch.full((B,), float(sigma_next), device=device)
-            x0_c_n = self.denoiser(x_eul, sigma_batch_n, condition)
-            if cfg != 1.0:
-                x0_u_n = self.denoiser(x_eul, sigma_batch_n, None)
-                x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg)
-            else:
-                x0_n = x0_c_n
-
-            d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
-            x = x + 0.5 * h * (d_cur + d_next)
+                d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
+                x = x + 0.5 * h * (d_cur + d_next)
 
         # σ→0 한계에서 x ≈ x0
         return x

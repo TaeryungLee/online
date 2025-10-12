@@ -9,6 +9,7 @@ import json
 
 from models.llama_model import LLaMAHF, LLaMAHFConfig
 from dataloader.dataset_TM_train_initializer import DATALoader, cycle
+from dataloader import dataset_eval_t2m_initializer as dataset_eval_t2m
 import options.option_transformer as option_trans
 import options.option_tae as option_tae
 import utils.utils_model as utils_model
@@ -16,6 +17,23 @@ import warnings
 from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
 from models.latent import LatentSpaceVAE
 from models.diffusion_init import DiffusionInit
+
+from transformers import AutoTokenizer, AutoModel
+from Evaluator_272.mld.models.architectures.temos.textencoder.distillbert_actor import DistilbertActorAgnosticEncoder
+from Evaluator_272.mld.models.architectures.temos.motionencoder.actor import ActorAgnosticEncoder
+from collections import OrderedDict
+from utils.eval_trans import evaluation_transformer_272_single
+from Evaluator_272 import mld
+
+# Ensure pickled checkpoints referring to top-level 'mld' can be imported
+import sys
+import importlib
+if 'mld' not in sys.modules:
+    try:
+        sys.modules['mld'] = importlib.import_module('Evaluator_272.mld')
+    except Exception:
+        pass
+
 
 warnings.filterwarnings('ignore')
 
@@ -75,11 +93,13 @@ writer = SummaryWriter(args.out_dir)
 logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 ##### ---- Dataloader ---- #####
-train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length)
+train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, split='train')
 train_loader_iter = cycle(train_loader)
+# val_loader = DATALoader(args.dataname, 32, args.latent_dir, unit_length=args.unit_length, split='val')
+val_loader = dataset_eval_t2m.DATALoader(args.dataname, True, 32, unit_length=args.unit_length)
+val_loader_iter = cycle(val_loader)
 
 ##### ---- Latent Model ---- #####
-args = option_tae.get_args_parser()
 clip_range = [-6, 6]
 net = LatentSpaceVAE(
     cfg=args,
@@ -93,14 +113,24 @@ net = LatentSpaceVAE(
     clip_range=clip_range
 )
 
+dataname = "humanml3d" if args.dataname == "t2m_272" else "babel"
+
+args.latent_model_pth = f"./checkpoints/latent/{dataname}/net_best_mpjpe.pth"
+print('loading latent model checkpoint from {}'.format(args.latent_model_pth))
+ckpt = torch.load(args.latent_model_pth, map_location='cpu')
+net.load_state_dict(ckpt['net'], strict=True)
+net.eval()
+net.to(comp_device)
+
 ##### ---- Network ---- #####
-from sentence_transformers import SentenceTransformer
-t5_model = SentenceTransformer('sentencet5-xxl/')
-t5_model.eval()
-for p in t5_model.parameters():
-    p.requires_grad = False
+# from sentence_transformers import SentenceTransformer
+# t5_model = SentenceTransformer('sentencet5-xxl/')
+# t5_model.eval()
+# for p in t5_model.parameters():
+#     p.requires_grad = False
 
 diffusion = DiffusionInit(args)
+
 
 
 if args.resume is not None:
@@ -118,9 +148,46 @@ diffusion.train()
 diffusion.to(comp_device)
 
 
+##### ---- Evaluator ---- #####
+
+
+modelpath = 'distilbert-base-uncased'
+
+textencoder = DistilbertActorAgnosticEncoder(modelpath, num_layers=4, latent_dim=256)
+motionencoder = ActorAgnosticEncoder(nfeats=272, vae = True, num_layers=4, latent_dim=256, max_len=300)
+
+ckpt_path = 'checkpoints/evaluator/'
+ckpt_path += 'hml_epoch=99.ckpt' if args.dataname == 't2m_272' else 'babel_epoch=69.ckpt'
+print(f'Loading evaluator checkpoint from {ckpt_path}')
+ckpt = torch.load(ckpt_path)
+# load textencoder
+textencoder_ckpt = {}
+for k, v in ckpt['state_dict'].items():
+    if k.split(".")[0] == "textencoder":
+        name = k.replace("textencoder.", "")
+        textencoder_ckpt[name] = v
+textencoder.load_state_dict(textencoder_ckpt, strict=True)
+textencoder.eval()
+textencoder.to(comp_device)
+
+# load motionencoder
+motionencoder_ckpt = {}
+for k, v in ckpt['state_dict'].items():
+    if k.split(".")[0] == "motionencoder":
+        name = k.replace("motionencoder.", "")
+        motionencoder_ckpt[name] = v
+motionencoder.load_state_dict(motionencoder_ckpt, strict=True)
+motionencoder.eval()
+motionencoder.to(comp_device)
+#--------------------------------
+
+evaluator = [textencoder, motionencoder]
+
+
+
 ##### ---- Optimizer & Scheduler ---- #####
-optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, diffusion, args.optimizer)
-scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.total_iter)
+# optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, diffusion, args.optimizer)
+# scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.total_iter)
 
 
 
@@ -133,33 +200,24 @@ scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.tota
 ##### ---- Training Loop ---- #####
 nb_iter, avg_loss = 0, 0.
 
+# Track best metrics across evaluations
+best_fid = float('inf')
+best_div = 0.0
+best_top1, best_top2, best_top3 = 0.0, 0.0, 0.0
+best_matching = float('inf')
+
 while nb_iter <= args.total_iter:
     batch = next(train_loader_iter)
-    text, m_tokens, m_tokens_len = batch
-    text = list(text)
+    text, m_tokens, m_tokens_len, feat_text = batch
     m_tokens, m_tokens_len = m_tokens.to(comp_device), m_tokens_len.to(comp_device)
 
-    breakpoint()
-
-    bs = len(text)
-    num_masked = int(bs * 0.1)  # 10%
-    mask_indices = random.sample(range(bs), num_masked)
-
-    for idx in mask_indices:
-        text[idx] = ''
-
-    feat_text = torch.from_numpy(t5_model.encode(text)).float()        
-    feat_text = feat_text.to(comp_device)
-
     # -------gt-------- 
-    input_latent = m_tokens[:,:-1]    # continuous token
-    loss = 0.0
+    loss, pred_xstart = diffusion(m_tokens, feat_text)
 
-    if args.num_gpus > 1:
-        loss = forward_loss_withmask_2_forward(latents=input_latent, trans=trans_encoder.module, m_lens = m_tokens_len, feat_text=feat_text, step=nb_iter, total_steps=args.total_iter)
-    else:
-        loss = forward_loss_withmask_2_forward(latents=input_latent, trans=trans_encoder, m_lens = m_tokens_len, feat_text=feat_text, step=nb_iter, total_steps=args.total_iter)
-
+    prev_best_fid_local = best_fid
+    # Visualization directory for evaluation
+    eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
+    os.makedirs(eval_vis_dir, exist_ok=True)
     
     optimizer.zero_grad()
     loss.backward()
@@ -169,7 +227,6 @@ while nb_iter <= args.total_iter:
     avg_loss = avg_loss + loss.item()
 
     nb_iter += 1
-    args.print_iter = 100
     if nb_iter % args.print_iter ==  0 :
         avg_loss = avg_loss / args.print_iter
         writer.add_scalar('./Loss/train', avg_loss, nb_iter)
@@ -179,14 +236,71 @@ while nb_iter <= args.total_iter:
         avg_loss = 0.
 
 
-    args.save_iter = 10000
-    if nb_iter % args.save_iter == 0:
+    if nb_iter % args.eval_iter == 0:
+        prev_best_fid_local = best_fid
+        # Visualization directory for evaluation
+        eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
+        os.makedirs(eval_vis_dir, exist_ok=True)
+
+        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_single(
+            val_loader,
+            net,
+            diffusion,
+            logger,
+            evaluator,
+            cfg=4.0,
+            device=comp_device,
+            unit_length=args.unit_length,
+            prev_best_fid=best_fid,
+            prev_best_div=best_div,
+            prev_best_rprecision_pred=[best_top1, best_top2, best_top3],
+            prev_best_matching_score_pred=best_matching,
+            draw=True,
+            vis_dir=eval_vis_dir,
+        )
+        # Save best FID checkpoint if improved
+        if best_fid < prev_best_fid_local:
+            save_dict = {
+                'denoiser': diffusion.state_dict(),
+                'iter': nb_iter,
+                'best_fid': best_fid,
+                'best_top1': best_top1,
+                'best_top2': best_top2,
+                'best_top3': best_top3,
+                'best_matching': best_matching,
+            }
+            if 'scheduler' in locals():
+                try:
+                    save_dict['scheduler'] = scheduler.state_dict()
+                except Exception:
+                    pass
+            if 'optimizer' in locals():
+                try:
+                    save_dict['optimizer'] = optimizer.state_dict()
+                except Exception:
+                    pass
+            torch.save(save_dict, os.path.join(args.out_dir, 'best_fid.pth'))
         # save 
-        torch.save({
-            'trans': trans_encoder.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'optimizer': optimizer.state_dict()
-        }, os.path.join(args.out_dir, f'latest.pth'))
+        latest_save = {
+            'denoiser': diffusion.state_dict(),
+            'iter': nb_iter,
+            'best_fid': best_fid,
+            'best_top1': best_top1,
+            'best_top2': best_top2,
+            'best_top3': best_top3,
+            'best_matching': best_matching,
+        }
+        if 'scheduler' in locals():
+            try:
+                latest_save['scheduler'] = scheduler.state_dict()
+            except Exception:
+                pass
+        if 'optimizer' in locals():
+            try:
+                latest_save['optimizer'] = optimizer.state_dict()
+            except Exception:
+                pass
+        torch.save(latest_save, os.path.join(args.out_dir, 'latest.pth'))
 
                     
 

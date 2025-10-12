@@ -7,7 +7,7 @@ from typing import List, Optional, Union
 from torch import nn, Tensor
 from torch.distributions.distribution import Distribution
 
-from mld.models.operator import PositionalEncoding
+from Evaluator_272.mld.models.operator import PositionalEncoding
 
 class ActorAgnosticEncoder(pl.LightningModule):
     def __init__(self, nfeats: int, vae: bool,
@@ -90,7 +90,7 @@ class ActorAgnosticEncoder(pl.LightningModule):
 
         # add positional encoding
         xseq = self.sequence_pos_encoding(xseq)
-        final = self.seqTransEncoder(xseq, src_key_padding_mask=~aug_mask)
+        final = self.seqTransEncoder(xseq, src_key_padding_mask=~aug_mask[:, :xseq.shape[0]])
 
         if self.hparams.vae:
             mu, logvar = final[0], final[1]
