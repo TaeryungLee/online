@@ -310,7 +310,7 @@ def evaluation_transformer_272_single(
     for batch in val_loader:
         # Expect from eval dataloader: (text, pose, m_length, caption_enc)
         # Align with train initializer where diffusion.sample(feat_text, length)
-        text, pose, m_length, caption_enc = batch
+        text, pose, m_length, caption_enc, caption_enc_len = batch
         bs, seq = pose.shape[:2]
         num_joints = 22
         pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).to(device)
@@ -323,7 +323,7 @@ def evaluation_transformer_272_single(
         for k in range(bs):    
             cond = caption_enc[k:k+1]
             length_k = int(m_length[k].item()) if torch.is_tensor(m_length) else int(m_length[k])
-            index_motion = denoiser.sample(cond, motion_length=length_k, cfg=cfg)
+            index_motion = denoiser.sample(cond, caption_enc_len, motion_length=length_k, cfg=cfg)
             pred_pose = latent_model.forward_decoder(index_motion)            
             cur_len = pred_pose.shape[1]
             pred_len[k] = min(cur_len, seq)

@@ -56,7 +56,8 @@ def get_args_parser():
     parser.add_argument('--denoiser_norm', type=str, default='ln', help='normalization')
     parser.add_argument('--denoiser_activation', type=str, default='gelu', help='activation')
     parser.add_argument('--denoiser_conv_mlp', type=bool, default=True, help='conv mlp')
-
+    parser.add_argument('--denoiser_ff_mult', type=int, default=4, help='ff mult')
+    parser.add_argument('--text_dim', type=int, default=1024, help='text dimension')
 
 
 

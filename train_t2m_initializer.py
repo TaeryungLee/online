@@ -186,8 +186,8 @@ evaluator = [textencoder, motionencoder]
 
 
 ##### ---- Optimizer & Scheduler ---- #####
-# optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, diffusion, args.optimizer)
-# scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.total_iter)
+optimizer = utils_model.initial_optim(args.decay_option, args.lr, args.weight_decay, diffusion, args.optimizer)
+scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.total_iter)
 
 
 
@@ -208,11 +208,11 @@ best_matching = float('inf')
 
 while nb_iter <= args.total_iter:
     batch = next(train_loader_iter)
-    text, m_tokens, m_tokens_len, feat_text = batch
-    m_tokens, m_tokens_len = m_tokens.to(comp_device), m_tokens_len.to(comp_device)
+    text, m_tokens, m_tokens_len, feat_text, feat_text_len = batch
+    m_tokens, m_tokens_len, feat_text, feat_text_len = m_tokens.to(comp_device), m_tokens_len.to(comp_device), feat_text.to(comp_device), feat_text_len.to(comp_device)
 
     # -------gt-------- 
-    loss, pred_xstart = diffusion(m_tokens, feat_text)
+    loss, pred_xstart = diffusion(m_tokens, feat_text, feat_text_len)
 
     prev_best_fid_local = best_fid
     # Visualization directory for evaluation
@@ -227,6 +227,7 @@ while nb_iter <= args.total_iter:
     avg_loss = avg_loss + loss.item()
 
     nb_iter += 1
+    args.print_iter = 1
     if nb_iter % args.print_iter ==  0 :
         avg_loss = avg_loss / args.print_iter
         writer.add_scalar('./Loss/train', avg_loss, nb_iter)
@@ -235,7 +236,7 @@ while nb_iter <= args.total_iter:
         logger.info(msg)
         avg_loss = 0.
 
-
+    args.eval_iter = 1
     if nb_iter % args.eval_iter == 0:
         prev_best_fid_local = best_fid
         # Visualization directory for evaluation

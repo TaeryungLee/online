@@ -16,13 +16,14 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, split='train'):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, split='train', max_text_len=32):
         
         self.max_length = 64
         self.window_size = window_size
         self.pointer = 0
         self.dataset_name = dataset_name
         self.unit_length = unit_length
+        self.max_text_len = max_text_len
 
         if dataset_name == 't2m_272':
             self.data_root = './data/humanml3d_272'
@@ -51,15 +52,16 @@ class Text2MotionDataset(data.Dataset):
                 continue
             if len(m_token_list) < self.window_size:
                 continue
-            try:
-                text_enc_dir = pjoin(self.text_enc_root, name + '.npy')
-                text_enc = np.load(text_enc_dir)
-            except:
-                continue
+            # try:
+            #     text_enc_dir = pjoin(self.text_enc_root, name + '.npy')
+            #     text_enc = np.load(text_enc_dir)
+            # except:
+            #     continue
 
             # Read text
             with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
                 text_data = []
+                text_enc_list = []
                 flag = False
                 lines = f.readlines()
 
@@ -70,13 +72,18 @@ class Text2MotionDataset(data.Dataset):
                     t_tokens = line_split[1].split(' ')
                     f_tag = float(line_split[2])
                     to_tag = float(line_split[3])
-                    caption_enc = text_enc[i]
+                    # caption_enc = text_enc[i]
 
                     f_tag = 0.0 if np.isnan(f_tag) else f_tag
                     to_tag = 0.0 if np.isnan(to_tag) else to_tag
 
                     text_dict['caption'] = caption
                     text_dict['tokens'] = t_tokens
+
+                    text_enc_dir = pjoin(self.text_enc_root, name + f'_{i}.npy')
+                    caption_enc = np.load(text_enc_dir)
+                    
+                    text_enc_list.append(caption_enc)
 
                     if f_tag == 0.0 and to_tag == 0.0:
                         flag = True
@@ -98,7 +105,7 @@ class Text2MotionDataset(data.Dataset):
             if flag:
                 data_dict[name] = {'m_token_list': m_token_list,
                                     'text':text_data,
-                                    'caption_enc': [text_enc[i] for i in range(len(text_enc))]}
+                                    'caption_enc': text_enc_list}
                 new_name_list.append(name)
 
         self.data_dict = data_dict
@@ -115,6 +122,20 @@ class Text2MotionDataset(data.Dataset):
         idx = random.choice(list(range(len(text_list))))
         text_data = text_list[idx]
         caption_enc = caption_enc[idx]
+        
+        # Truncate/pad caption_enc to self.max_text_len while keeping the true (pre-pad) length
+        orig_len = caption_enc.shape[0]
+        target_len = self.max_text_len
+        if orig_len > target_len:
+            # truncate
+            caption_enc = caption_enc[:target_len]
+        elif orig_len < target_len:
+            # pad with zeros along the sequence dimension
+            pad_shape = (target_len - orig_len,) + tuple(caption_enc.shape[1:])
+            pad = np.zeros(pad_shape, dtype=caption_enc.dtype)
+            caption_enc = np.concatenate([caption_enc, pad], axis=0)
+            
+        caption_enc_len = min(orig_len, target_len)
 
         caption = text_data['caption']
 
@@ -135,7 +156,7 @@ class Text2MotionDataset(data.Dataset):
         m_tokens = m_tokens[:self.window_size]
         m_tokens_len = self.window_size
 
-        return caption, m_tokens, m_tokens_len, caption_enc
+        return caption, m_tokens, m_tokens_len, caption_enc, caption_enc_len
         # return caption, m_tokens, m_tokens_len
 
 

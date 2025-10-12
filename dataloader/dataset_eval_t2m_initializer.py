@@ -16,7 +16,7 @@ def collate_fn(batch):
 
 
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, is_test, max_text_len = 20, window_size = 64, unit_length = 4):
+    def __init__(self, dataset_name, is_test, max_text_len = 32, window_size = 64, unit_length = 4):
         
         self.max_length = 20
         self.pointer = 0
@@ -66,13 +66,14 @@ class Text2MotionDataset(data.Dataset):
             text_data = []
             flag = False
             # Load text encodings
-            try:
-                text_enc = np.load(pjoin(self.text_enc_root, name + '.npy'))
-            except Exception:
-                continue
+            # try:
+            #     text_enc = np.load(pjoin(self.text_enc_root, name + '.npy'))
+            # except Exception:
+            #     continue
 
             with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
                 lines = f.readlines()
+                text_enc_list = []
                 for i, line in enumerate(lines):
                     text_dict = {}
                     line_split = line.strip().split('#')
@@ -80,8 +81,12 @@ class Text2MotionDataset(data.Dataset):
                     tokens = line_split[1].split(' ')
                     f_tag = float(line_split[2])
                     to_tag = float(line_split[3])
-                    caption_enc = text_enc[i]
-                    
+                    # caption_enc = text_enc[i]
+                    text_enc_dir = pjoin(self.text_enc_root, name + f'_{i}.npy')
+                    caption_enc = np.load(text_enc_dir)
+
+                    text_enc_list.append(caption_enc)
+
                     f_tag = 0.0 if np.isnan(f_tag) else f_tag
                     to_tag = 0.0 if np.isnan(to_tag) else to_tag
 
@@ -110,7 +115,7 @@ class Text2MotionDataset(data.Dataset):
                 data_dict[name] = {'motion': motion,
                                     'length': len(motion),
                                     'text': text_data,
-                                    'caption_enc': [text_enc[i] for i in range(len(text_enc))]}
+                                    'caption_enc': text_enc_list}
                 new_name_list.append(name)
                 length_list.append(len(motion))
 
@@ -144,10 +149,23 @@ class Text2MotionDataset(data.Dataset):
         data = self.data_dict[name]
         motion, text_list = data['motion'], data['text']
         caption_enc_list = data.get('caption_enc', None)
+        
         text_idx = random.choice(list(range(len(text_list))))
         text_data = text_list[text_idx]
         caption = text_data['caption']
         caption_enc = caption_enc_list[text_idx] if caption_enc_list is not None else None
+        
+        # Truncate/pad caption_enc to self.max_text_len
+        if isinstance(caption_enc, np.ndarray):
+            orig_len = caption_enc.shape[0]
+            target_len = self.max_text_len
+            if orig_len > target_len:
+                caption_enc = caption_enc[:target_len]
+            elif orig_len < target_len:
+                pad_shape = (target_len - orig_len,) + tuple(caption_enc.shape[1:])
+                pad = np.zeros(pad_shape, dtype=caption_enc.dtype)
+                caption_enc = np.concatenate([caption_enc, pad], axis=0)
+        caption_enc_len = min(orig_len, target_len)
 
         # Take first window_size frames only
         m_length = self.window_size
@@ -156,7 +174,7 @@ class Text2MotionDataset(data.Dataset):
         # Motion Normalization
         motion = (motion - self.mean) / self.std
 
-        return caption, motion, m_length, caption_enc
+        return caption, motion, m_length, caption_enc, caption_enc_len
 
 
 

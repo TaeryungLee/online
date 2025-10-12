@@ -58,7 +58,7 @@ class DiffusionInit(nn.Module):
         self.P_std      = float(getattr(cfg, "P_std",  1.2))
 
     # ---------------- TRAIN ----------------
-    def forward(self, target, condition):
+    def forward(self, target, condition, condition_len):
         """
         target: clean x0 tensor (B, C, T, ...)  -- 전 프레임 동일 σ 적용
         condition: any (B, ...)
@@ -84,7 +84,7 @@ class DiffusionInit(nn.Module):
         x_noisy = target + sigma_b * noise
 
         # x0 예측
-        pred_xstart = self.denoiser(x_noisy, sigma, condition)   # (B, C, T, ...)
+        pred_xstart = self.denoiser(x_noisy, sigma, condition, condition_len)   # (B, C, T, ...)
 
         # EDM 가중 MSE: weight = (σ^2 + σ_data^2) / (σ σ_data)^2
         w = (sigma_b**2 + (self.sigma_data**2)) / ((sigma_b * self.sigma_data)**2)
@@ -97,6 +97,7 @@ class DiffusionInit(nn.Module):
     def sample(
         self,
         condition,
+        condition_len,
         motion_length,
         cfg: float = 1.0,
         num_steps: int = None
@@ -130,9 +131,9 @@ class DiffusionInit(nn.Module):
             # Heun 1단계: Euler
             # denoiser의 σ 인자는 배치 스칼라가 필요하므로 [B]로 맞춰서 전달
             sigma_batch = torch.full((B,), float(sigma_i), device=device)
-            x0_c = self.denoiser(x, sigma_batch, condition)
+            x0_c = self.denoiser(x, sigma_batch, condition, condition_len)
             if cfg != 1.0:
-                x0_u = self.denoiser(x, sigma_batch, None)
+                x0_u = self.denoiser(x, sigma_batch, None, condition_len)
                 x0   = cfg_combine(x0_c, x0_u, cfg)
             else:
                 x0 = x0_c
@@ -143,9 +144,9 @@ class DiffusionInit(nn.Module):
             if i < N - 1:
                 # Heun 보정
                 sigma_batch_n = torch.full((B,), float(sigma_next), device=device)
-                x0_c_n = self.denoiser(x_eul, sigma_batch_n, condition)
+                x0_c_n = self.denoiser(x_eul, sigma_batch_n, condition, condition_len)
                 if cfg != 1.0:
-                    x0_u_n = self.denoiser(x_eul, sigma_batch_n, None)
+                    x0_u_n = self.denoiser(x_eul, sigma_batch_n, None, condition_len)
                     x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg)
                 else:
                     x0_n = x0_c_n
