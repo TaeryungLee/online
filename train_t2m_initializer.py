@@ -216,8 +216,8 @@ while nb_iter <= args.total_iter:
 
     prev_best_fid_local = best_fid
     # Visualization directory for evaluation
-    eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
-    os.makedirs(eval_vis_dir, exist_ok=True)
+    # eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
+    # os.makedirs(eval_vis_dir, exist_ok=True)
     
     optimizer.zero_grad()
     loss.backward()

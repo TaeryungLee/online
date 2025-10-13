@@ -74,7 +74,7 @@ class Block01(nn.Module):
             nn.SiLU(),
             nn.Linear(latent_dim, 2 * latent_dim)
         )
-        self.mod_ca_texttime = nn.Sequential(
+        self.mod_ca = nn.Sequential(
             nn.SiLU(),
             nn.Linear(latent_dim, 2 * latent_dim)
         )
@@ -122,15 +122,19 @@ class Block01(nn.Module):
             x_ca = self.norm_ca_text(x)
 
             # TODO: remove this, just use adaln with sigma_enc
-            max_len_pe = self.text_time_PE.shape[1]
-            starts = text_timing.to(torch.long).clamp(min=0, max=max_len_pe - T)
-            ar = torch.arange(T, device=x.device).view(1, T)  # [1, T]
-            idx = starts.view(-1, 1) + ar                      # [B, T]
-            pe_exp = self.text_time_PE.to(x.device).expand(B, -1, -1)  # [B, max_len, C]
-            text_time_PE = torch.gather(pe_exp, 1, idx.unsqueeze(-1).expand(-1, -1, C))  # [B, T, C]
-            text_time_ca_out, _ = self.cross_attn_text_time(text_time_PE, condition, condition, key_padding_mask=key_padding_mask)
+            # max_len_pe = self.text_time_PE.shape[1]
+            # starts = text_timing.to(torch.long).clamp(min=0, max=max_len_pe - T)
+            # ar = torch.arange(T, device=x.device).view(1, T)  # [1, T]
+            # idx = starts.view(-1, 1) + ar                      # [B, T]
+            # pe_exp = self.text_time_PE.to(x.device).expand(B, -1, -1)  # [B, max_len, C]
+            # text_time_PE = torch.gather(pe_exp, 1, idx.unsqueeze(-1).expand(-1, -1, C))  # [B, T, C]
+            # text_time_ca_out, _ = self.cross_attn_text_time(text_time_PE, condition, condition, key_padding_mask=key_padding_mask)
 
-            gam_beta_ca = self.mod_ca_texttime(text_time_ca_out)  # [B, 2C]
+            # gam_beta_ca = self.mod_ca(text_time_ca_out)  # [B, 2C]
+            # gamma_ca, beta_ca = gam_beta_ca.chunk(2, dim=-1)
+            # x = x_ca * (1 + gamma_ca) + beta_ca
+            
+            gam_beta_ca = self.mod_ca(sigma_enc).unsqueeze(1)  # [B, 2C]
             gamma_ca, beta_ca = gam_beta_ca.chunk(2, dim=-1)
             x = x_ca * (1 + gamma_ca) + beta_ca
 
