@@ -86,6 +86,8 @@ CUDA_VISIBLE_DEVICES=1 python train_latent.py --dataname t2m_babel_272 --encoder
 
 
 
+CUDA_VISIBLE_DEVICES=0 python train_t2m_initializer.py --dataname t2m_272 --exp-name denoiser01_ln8_lr1e-4_smax2.0 --denoiser_block 1 --denoiser_num_layers 8 --lr 1e-4 --sigma_max 2.0
+
 CUDA_VISIBLE_DEVICES=0 python train_t2m_initializer.py --dataname t2m_272 --exp-name denoiser01_ln8_lr1e-4 --denoiser_block 1 --denoiser_num_layers 8 --lr 1e-4
 CUDA_VISIBLE_DEVICES=1 python train_t2m_initializer.py --dataname t2m_272 --exp-name denoiser01_ln10_lr1e-4 --denoiser_block 1 --denoiser_num_layers 10 --lr 1e-4
 CUDA_VISIBLE_DEVICES=2 python train_t2m_initializer.py --dataname t2m_272 --exp-name denoiser01_ln12_lr1e-4 --denoiser_block 1 --denoiser_num_layers 12 --lr 1e-4

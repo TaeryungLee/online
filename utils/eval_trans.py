@@ -330,7 +330,7 @@ def evaluation_transformer_272_single(
             pred_pose_eval[k:k+1, :m_length[k]] = pred_pose[k:k+1, :m_length[k]]
 
         # Optional visualization (up to first 3 samples)
-        if smpl_model is not None:
+        if draw:
             try:
                 for k in range(min(3, bs)):
                     length_k = int(m_length[k].item()) if torch.is_tensor(m_length) else int(m_length[k])
