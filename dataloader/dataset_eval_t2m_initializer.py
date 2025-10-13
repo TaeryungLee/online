@@ -188,6 +188,8 @@ def DATALoader(dataset_name, is_test,
                                               shuffle = True,
                                               num_workers=num_workers,
                                               collate_fn=collate_fn,
+                                              pin_memory=True,
+                                              persistent_workers=True,
                                               drop_last = drop_last)
     return val_loader
 

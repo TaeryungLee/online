@@ -184,7 +184,7 @@ class DenoiserInit(nn.Module):
 
 
     def forward(self, x, sigma, condition, condition_len, text_timing=None):
-        # return self.denoiser(x, sigma, condition)
+        # preconditioning
         c_skip = self.sigma_data ** 2 / (sigma ** 2 + self.sigma_data ** 2)
         c_out = sigma * self.sigma_data / (sigma ** 2 + self.sigma_data ** 2).sqrt()
         c_in = 1 / (self.sigma_data ** 2 + sigma ** 2).sqrt()
