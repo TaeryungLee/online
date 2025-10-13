@@ -93,10 +93,10 @@ writer = SummaryWriter(args.out_dir)
 logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 ##### ---- Dataloader ---- #####
-train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, split='train')
+train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, split='train', num_workers=args.num_workers)
 train_loader_iter = cycle(train_loader)
 # val_loader = DATALoader(args.dataname, 32, args.latent_dir, unit_length=args.unit_length, split='val')
-val_loader = dataset_eval_t2m.DATALoader(args.dataname, True, 32, unit_length=args.unit_length)
+val_loader = dataset_eval_t2m.DATALoader(args.dataname, True, 32, unit_length=args.unit_length, num_workers=args.num_workers)
 val_loader_iter = cycle(val_loader)
 
 ##### ---- Latent Model ---- #####
