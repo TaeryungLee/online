@@ -83,8 +83,14 @@ class DiffusionInit(nn.Module):
         noise = torch.randn_like(target)
         x_noisy = target + sigma_b * noise
 
-        # x0 예측
-        pred_xstart = self.denoiser(x_noisy, sigma, condition, condition_len)   # (B, C, T, ...)
+        # x0 예측 (CFG during training controlled by self.cfg.cfg)
+        cfg_scale = float(getattr(self.cfg, "cfg", 1.0))
+        x0_c = self.denoiser(x_noisy, sigma, condition, condition_len)
+        if cfg_scale != 1.0:
+            x0_u = self.denoiser(x_noisy, sigma, None, condition_len)
+            pred_xstart = cfg_combine(x0_c, x0_u, cfg_scale)
+        else:
+            pred_xstart = x0_c
 
         # EDM 가중 MSE: weight = (σ^2 + σ_data^2) / (σ σ_data)^2
         w = (sigma_b**2 + (self.sigma_data**2)) / ((sigma_b * self.sigma_data)**2)

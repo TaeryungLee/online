@@ -246,7 +246,7 @@ while nb_iter <= args.total_iter:
             diffusion,
             logger,
             evaluator,
-            cfg=4.0,
+            cfg=args.cfg,
             device=comp_device,
             unit_length=args.unit_length,
             prev_best_fid=best_fid,
