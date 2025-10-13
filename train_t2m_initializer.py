@@ -207,6 +207,7 @@ best_top1, best_top2, best_top3 = 0.0, 0.0, 0.0
 best_matching = float('inf')
 
 while nb_iter <= args.total_iter:
+    breakpoint()
     batch = next(train_loader_iter)
     text, m_tokens, m_tokens_len, feat_text, feat_text_len = batch
     m_tokens, m_tokens_len, feat_text, feat_text_len = m_tokens.to(comp_device), m_tokens_len.to(comp_device), feat_text.to(comp_device), feat_text_len.to(comp_device)

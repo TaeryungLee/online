@@ -417,7 +417,7 @@ def evaluation_transformer_272_single(
             prev_div_val = float(prev_best_div)
             if diversity > prev_div_val:
                 logger.info(f"--> --> \t Diversity Pred Improved from {prev_div_val:.4f} to {diversity:.4f} !!!")
-            best_diversity_ret = min(prev_div_val, float(diversity))
+            best_diversity_ret = max(prev_div_val, float(diversity))
         except Exception:
             best_diversity_ret = float(diversity)
     else:

@@ -32,7 +32,6 @@ def get_args_parser():
 
     # Denoiser Parameters
     parser.add_argument('--num_diffusion_head_layers', type=int, default=9, help='number of diffusion head layers')
-    parser.add_argument('--total_iter', type=int, default=100000, help='total iteration')
     parser.add_argument('--lr', default=1e-4, type=float, help='max learning rate')
     parser.add_argument('--gamma', default=0.05, type=float, help="learning rate decay")
     
@@ -65,12 +64,12 @@ def get_args_parser():
     # Others
 
     parser.add_argument('--num_gpus', default=1, type=int, help='number of GPUs')
-    parser.add_argument('--total-iter', default=2000000, type=int, help='number of total iterations to run')
+    parser.add_argument('--total-iter', default=5000000, type=int, help='number of total iterations to run')
     parser.add_argument('--eval-iter', default=50000, type=int, help='evaluation frequency')
     parser.add_argument('--batch-size', default=256, type=int, help='batch size')
     parser.add_argument('--print-iter', default=200, type=int, help='print frequency')
     parser.add_argument('--num_workers', default=8, type=int, help='number of workers')
-    
+
     parser.add_argument('--text', type=str, default='A man is jogging around.')
     parser.add_argument('--mode', type=str, default='rot', choices=['pos', 'rot'], help='recover mode, pos: position, rot: rotation')
 
