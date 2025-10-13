@@ -78,7 +78,6 @@ class DiffusionInit(nn.Module):
         rnd = torch.randn(B, 1, 1, 1, device=device)
         sigma = torch.exp(self.P_mean + self.P_std * rnd).view(B)  # [B]
         sigma_b = sigma.view(B, *([1] * (target.dim() - 1)))                      # [B,1,1,...]
-        breakpoint()
 
         # 노이즈 주입 (VE)
         noise = torch.randn_like(target)
@@ -118,7 +117,7 @@ class DiffusionInit(nn.Module):
         sigmas = edm_sigma_steps(N, self.sigma_min, self.sigma_max, self.rho, device=device)  # [N]
         sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1], device=device)])
         sigma0 = sigmas[0].view(1, *([1] * (len(shape) - 1)))                                 # [1,1,1,...]
-        breakpoint()
+        
         # 초기 상태
         x = torch.randn(shape, device=device) * sigma0
 
