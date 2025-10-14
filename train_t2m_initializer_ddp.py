@@ -180,7 +180,13 @@ if args.resume is not None:
 diffusion.train()
 diffusion.to(comp_device)
 if world_size > 1:
-    diffusion = DDP(diffusion, device_ids=[local_rank] if use_cuda else None, output_device=local_rank if use_cuda else None, find_unused_parameters=False)
+    diffusion = DDP(
+        diffusion,
+        device_ids=[local_rank] if use_cuda else None,
+        output_device=local_rank if use_cuda else None,
+        find_unused_parameters=False,
+        broadcast_buffers=False
+    )
 
 
 ##### ---- Evaluator ---- #####
