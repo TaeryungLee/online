@@ -290,7 +290,6 @@ while nb_iter <= args.total_iter:
             diffusion.module if isinstance(diffusion, DDP) else diffusion,
             logger,
             evaluator,
-            cfg=args.cfg,
             device=comp_device,
             unit_length=args.unit_length,
             prev_best_fid=best_fid,

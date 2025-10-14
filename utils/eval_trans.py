@@ -277,7 +277,6 @@ def evaluation_transformer_272_single(
     denoiser,
     logger,
     evaluator,
-    cfg=4.0,
     device=torch.device('cuda'),
     unit_length=4,
     prev_best_fid=None,
@@ -319,7 +318,7 @@ def evaluation_transformer_272_single(
 
         # Batched generation: use max target length in batch, then slice
         motion_length_max = int(m_length.max().item()) if torch.is_tensor(m_length) else int(max(m_length))
-        index_motion = denoiser.sample(caption_enc, caption_enc_len, motion_length=motion_length_max, cfg=cfg)
+        index_motion = denoiser.sample(caption_enc, caption_enc_len, motion_length=motion_length_max)
         pred_pose = latent_model.forward_decoder(index_motion)  # [B, T, D]
         # cur_len = pred_pose.shape[1]
         # fill_len = min(cur_len, seq)

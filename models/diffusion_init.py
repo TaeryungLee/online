@@ -129,67 +129,140 @@ class DiffusionInit(nn.Module):
         loss = loss.view(B, -1).mean(dim=1)                      # per-sample
         return loss.mean(), pred_xstart
 
-    # ---------------- SAMPLE ----------------
+    # # ---------------- SAMPLE ----------------
+    # @torch.no_grad()
+    # def sample(
+    #     self,
+    #     condition,
+    #     condition_len,
+    #     motion_length,
+    #     cfg: float = 1.0,
+    #     num_steps: int = None
+    # ):
+    #     """
+    #     Heun ODE (EDM), uniform σ per-sample across all frames.
+    #     - σ 스케줄: Karras/EDM ρ-스케줄
+    #     - 초기화: σ_0 * N(0,1) (σ_0 = sigma_steps[0])
+    #     """
+    #     device = condition.device if torch.is_tensor(condition) else ("cuda" if torch.cuda.is_available() else "cpu")
+    #     B = condition.shape[0]
+    #     N = int(num_steps or self.num_timesteps)
+    #     N = max(N, 2)
+    #     shape = (B, motion_length, self.cfg.latent_dim)
+
+    #     # σ 스텝 (공유 스칼라 σ; 배치/프레임 전역 동일)
+    #     sigmas = edm_sigma_steps(N, self.sigma_min, self.sigma_max, self.rho, device=device)  # [N]
+    #     sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1], device=device)])
+    #     sigma0 = sigmas[0].view(1, *([1] * (len(shape) - 1)))                                 # [1,1,1,...]
+        
+    #     # 초기 상태
+    #     x = torch.randn(shape, device=device) * sigma0
+
+    #     for i in tqdm(range(N), desc="Sampling initial window", leave=False):
+    #         sigma_i   = sigmas[i]
+    #         sigma_next= sigmas[i + 1]
+    #         sb   = sigma_i.view(1, *([1] * (len(shape) - 1)))       # [1,1,1,...]
+    #         sb_n = sigma_next.view(1, *([1] * (len(shape) - 1)))
+    #         h = (sb_n - sb)
+
+    #         # Heun 1단계: Euler
+    #         # denoiser의 σ 인자는 배치 스칼라가 필요하므로 [B]로 맞춰서 전달
+    #         sigma_batch = torch.full((B,), float(sigma_i), device=device)
+    #         # x0 predict한 이후 그 방향으로 적분
+    #         x0_c = self.denoiser(x, sigma_batch, condition, condition_len)
+    #         if cfg != 1.0:
+    #             x0_u = self.denoiser(x, sigma_batch, None, condition_len)
+    #             x0   = cfg_combine(x0_c, x0_u, cfg)
+    #         else:
+    #             x0 = x0_c
+    #         # return (x - x0) / sigma.clamp_min(1e-12)
+    #         d_cur = ode_drift_from_x0(x, sb, x0)
+    #         x_eul = x + h * d_cur
+            
+    #         if i < N - 1:
+    #             # Heun 보정
+    #             sigma_batch_n = torch.full((B,), float(sigma_next), device=device)
+    #             x0_c_n = self.denoiser(x_eul, sigma_batch_n, condition, condition_len)
+    #             if cfg != 1.0:
+    #                 x0_u_n = self.denoiser(x_eul, sigma_batch_n, None, condition_len)
+    #                 x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg)
+    #             else:
+    #                 x0_n = x0_c_n
+
+    #             d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
+    #             x = x + 0.5 * h * (d_cur + d_next)
+
+    #     # σ→0 한계에서 x ≈ x0
+    #     return x
     @torch.no_grad()
     def sample(
         self,
         condition,
         condition_len,
         motion_length,
-        cfg: float = 1.0,
         num_steps: int = None
     ):
         """
-        Heun ODE (EDM), uniform σ per-sample across all frames.
-        - σ 스케줄: Karras/EDM ρ-스케줄
-        - 초기화: σ_0 * N(0,1) (σ_0 = sigma_steps[0])
+        diffusers EDMEulerScheduler 기반 + 배치 결합 1패스 CFG
+        입력/출력 시그니처는 기존과 동일.
         """
         device = condition.device if torch.is_tensor(condition) else ("cuda" if torch.cuda.is_available() else "cpu")
+        dtype  = condition.dtype  if torch.is_tensor(condition) else torch.float32
+
         B = condition.shape[0]
         N = int(num_steps or self.num_timesteps)
         N = max(N, 2)
         shape = (B, motion_length, self.cfg.latent_dim)
+        cfg = self.cfg.cfg
 
-        # σ 스텝 (공유 스칼라 σ; 배치/프레임 전역 동일)
-        sigmas = edm_sigma_steps(N, self.sigma_min, self.sigma_max, self.rho, device=device)  # [N]
-        sigmas = torch.cat([sigmas, torch.zeros_like(sigmas[:1], device=device)])
-        sigma0 = sigmas[0].view(1, *([1] * (len(shape) - 1)))                                 # [1,1,1,...]
-        
-        # 초기 상태
-        x = torch.randn(shape, device=device) * sigma0
+        # --- 스케줄러 파라미터 동기화 & timesteps 설정 ---
+        self.scheduler.set_timesteps(N, device=device)
+        self.scheduler.is_scale_input_called = True
 
-        for i in tqdm(range(N), desc="Sampling initial window", leave=False):
-            sigma_i   = sigmas[i]
-            sigma_next= sigmas[i + 1]
-            sb   = sigma_i.view(1, *([1] * (len(shape) - 1)))       # [1,1,1,...]
-            sb_n = sigma_next.view(1, *([1] * (len(shape) - 1)))
-            h = (sb_n - sb)
+        sigmas = self.scheduler.sigmas.to(device=device, dtype=dtype)   # [N+1] (마지막이 0 근처)
+        t_steps = self.scheduler.timesteps.to(device=device, dtype=dtype)
+        sigma0 = sigmas[0].view(1, 1, 1)
 
-            # Heun 1단계: Euler
-            # denoiser의 σ 인자는 배치 스칼라가 필요하므로 [B]로 맞춰서 전달
-            sigma_batch = torch.full((B,), float(sigma_i), device=device)
-            x0_c = self.denoiser(x, sigma_batch, condition, condition_len)
+        # --- 초기 상태: x ~ N(0,1) * sigma_max ---
+        x = torch.randn(shape, device=device, dtype=dtype) * sigma0
+
+        # --- uncond용 null context 준비 ---
+        null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)
+        len_uncond = torch.ones(B, device=device, dtype=torch.long)
+
+        # --- 샘플링 루프 ---
+        for i in range(len(sigmas) - 1):
+            sigma_i = sigmas[i]                                     # 스칼라 텐서
+            t_i = t_steps[i]
+            sb = sigma_i.view(1, 1, 1)                              # [1,1,1]
+            sigma_cat = torch.full((2 * B,), float(sigma_i), device=device, dtype=dtype)  # [2B]
+
+            # 배치 결합: cond / uncond를 한 번에 추론
+            x_cat       = torch.cat([x, x], dim=0)   # [2B, T, C]
+            cond_cat    = torch.cat([condition, null_ctx], dim=0) if condition is not None else torch.cat([null_ctx, null_ctx], dim=0)
+            condlen_cat = torch.cat([condition_len, len_uncond], dim=0) if condition_len is not None else torch.cat([len_uncond, len_uncond], dim=0)
+
+            # 한 번의 forward로 x0_c, x0_u 동시 계산
+            x0_both = self.denoiser(x_cat, sigma_cat, cond_cat, condlen_cat)  # [2B, T, C]
+            x0_c, x0_u = x0_both[:B], x0_both[B:]
+
+            # CFG 결합
             if cfg != 1.0:
-                x0_u = self.denoiser(x, sigma_batch, None, condition_len)
-                x0   = cfg_combine(x0_c, x0_u, cfg)
+                x0 = x0_u + cfg * (x0_c - x0_u)
             else:
                 x0 = x0_c
-            # return (x - x0) / sigma.clamp_min(1e-12)
-            d_cur = ode_drift_from_x0(x, sb, x0)
-            x_eul = x + h * d_cur
-            
-            if i < N - 1:
-                # Heun 보정
-                sigma_batch_n = torch.full((B,), float(sigma_next), device=device)
-                x0_c_n = self.denoiser(x_eul, sigma_batch_n, condition, condition_len)
-                if cfg != 1.0:
-                    x0_u_n = self.denoiser(x_eul, sigma_batch_n, None, condition_len)
-                    x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg)
-                else:
-                    x0_n = x0_c_n
 
-                d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
-                x = x + 0.5 * h * (d_cur + d_next)
+            # x0 -> epsilon 변환 (EDMEuler는 epsilon을 기대)
+            eps = (x - x0) / sb.clamp_min(1e-12)
 
-        # σ→0 한계에서 x ≈ x0
+            # diffusers 한 스텝
+            out = self.scheduler.step(
+                model_output=eps,
+                timestep=t_i,   # EDMEuler는 sigma값을 timestep으로 사용
+                sample=x,
+                return_dict=True
+            )
+            x = out.prev_sample
+
+        # sigma -> 0 한계에서 x ≈ x0
         return x
