@@ -97,6 +97,7 @@ CUDA_VISIBLE_DEVICES=3 python train_t2m_initializer.py --num_workers 50 --datana
 CUDA_VISIBLE_DEVICES=0 python train_t2m_initializer.py --num_workers 50 --dataname t2m_272 --exp-name denoiser01_ln24 --denoiser_block 1 --denoiser_num_layers 24 --lr 2e-4
 
 torchrun --nproc_per_node=4 train_t2m_initializer_ddp.py --num_workers 50 --batch_size 256 --exp-name denoiser01_ln16_ddp --denoiser_block 2 --denoiser_num_layers 16 --lr 2e-4
+torchrun --nproc_per_node=1 train_t2m_initializer_ddp.py --num_workers 50 --batch_size 256 --exp-name denoiser01_ln16_ddp --denoiser_block 2 --denoiser_num_layers 16 --lr 2e-4
 
 
 

@@ -184,7 +184,7 @@ if world_size > 1:
         diffusion,
         device_ids=[local_rank] if use_cuda else None,
         output_device=local_rank if use_cuda else None,
-        find_unused_parameters=False,
+        find_unused_parameters=True,
         broadcast_buffers=False
     )
 
