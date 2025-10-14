@@ -475,6 +475,8 @@ def evaluation_transformer_272_roll(
         bs, seq = pose.shape[:2]
         num_joints = 22
         pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).to(device)
+        pose = pose.to(device).float()
+        pose_enc = latent_model.encode(pose)
         pred_len = torch.ones(bs).long()
         
         caption_enc, caption_enc_len = caption_enc.to(device), caption_enc_len.to(device)
@@ -482,7 +484,8 @@ def evaluation_transformer_272_roll(
         # Batched generation: use max target length in batch, then slice
         motion_length_max = int(m_length.max().item()) if torch.is_tensor(m_length) else int(max(m_length))
         # TODO: 여기서부터 계속 수정 필요, 일단 init부터 고치고서.
-        index_motion = denoiser.sample(caption_enc, caption_enc_len, motion_length=motion_length_max)
+
+        index_motion = denoiser.stream_rollout(pose_enc[:, :denoiser.W], caption_enc, caption_enc_len, motion_length_max)
         pred_pose = latent_model.forward_decoder(index_motion)  # [B, T, D]
         # cur_len = pred_pose.shape[1]
         # fill_len = min(cur_len, seq)

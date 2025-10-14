@@ -91,6 +91,7 @@ class DiffusionRoll(nn.Module):
     """
     def __init__(self, cfg):
         super().__init__()
+        self.cfg = cfg
         self.denoiser = DenoiserRoll(cfg)  # (x, sigma, condition) -> x0_pred
 
         # Shapes
@@ -106,6 +107,11 @@ class DiffusionRoll(nn.Module):
 
         # Sampler
         self.num_timesteps = int(getattr(cfg, "num_timesteps", 32))
+
+        # null context for CFG (matches text input dim)
+        null_dim = self.cfg.text_dim if getattr(self.cfg, "text_dim", None) is not None else self.cfg.latent_dim
+        self.null_ctx = nn.Parameter(torch.zeros(1, 1, null_dim))
+        nn.init.normal_(self.null_ctx, std=0.02)
 
 
     # ---------- TRAIN ----------
@@ -138,8 +144,25 @@ class DiffusionRoll(nn.Module):
         noise = torch.randn_like(target)
         x_noisy = target + sigma_map * noise
 
-        # 6) x0 예측 (sigma는 frame-wise 텐서로 전달: 브로드캐스트 가정)
-        pred_x0 = self.denoiser(x_noisy, sigma_map, condition, condition_len, text_timing)                          # (B, C, T, ...)
+        # 6) x0 예측 with CFG (batch-concat cond/uncond, single forward)
+        cfg_scale = self.cfg.cfg
+        B = target.shape[0]
+        # prepare uncond null context and lengths
+        null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)
+        len_uncond = torch.ones(B, device=device, dtype=torch.long)
+
+        x_cat         = torch.cat([x_noisy,     x_noisy],     dim=0)
+        sigma_cat     = torch.cat([sigma_map,   sigma_map],   dim=0)
+        cond_cat      = torch.cat([condition,   null_ctx],    dim=0)
+        condlen_cat   = torch.cat([condition_len, len_uncond], dim=0)
+        if text_timing is not None:
+            text_timing_cat = torch.cat([text_timing, text_timing], dim=0)
+        else:
+            text_timing_cat = None
+
+        x0_both = self.denoiser(x_cat, sigma_cat, cond_cat, condlen_cat, text_timing_cat)
+        x0_c, x0_u = x0_both[:B], x0_both[B:]
+        pred_x0 = x0_u + cfg_scale * (x0_c - x0_u) if cfg_scale != 1.0 else x0_c
 
         # 7) EDM weighted MSE
         # weight = (σ^2 + σ_data^2) / (σ * σ_data)^2  (elementwise)
@@ -152,32 +175,28 @@ class DiffusionRoll(nn.Module):
     @torch.no_grad()
     def stream_rollout(
         self,
-        condition,
         init_x0,                  
+        condition,
+        condition_len,
         total_frames: int,         # 최종 생성할 총 프레임 수 (>= W 권장)
-        cfg_scale: float = 1.0,
         num_steps: int = None,
-        heun_churn: float = None,
-        warm_start_noise: float = 1.0,   # 0이면 완전 보존, 1이면 표준 노이즈 주입
-        tail_noise_std: float = 1.0,     # 뒤에 붙일 tail 노이즈 표준편차
     ):
-        breakpoint()
         """
         k//2 프레임씩 윈도우를 뒤로 밀면서 스트리밍 롤아웃.
         - 각 윈도우는 Heun ODE(EDM) + frame-wise σ 스케줄로 clean을 생성.
         - 매 루프 후 앞쪽 hop 프레임을 외부로 내보내고, 뒤쪽엔 노이즈 hop 프레임을 덧붙여 다음 윈도우 시작.
         반환: (long_x0)  (B, C, total_frames, ...)
         """
-        assert init_x0 is not None, "init_x0 is required."
+        cfg_scale = self.cfg.cfg
         shape = init_x0.shape
         B = shape[0]
         T = shape[self.time_dim]
         assert T == self.W, f"init_x0 time length {T} must equal W {self.W}"
         device = init_x0.device
 
-        hop = self.k
+        hop = self.k + 1
         N = int(num_steps or self.num_timesteps)
-        churn = self.heun_churn_default if heun_churn is None else heun_churn
+
 
         # 결과 버퍼
         chunks = []
@@ -197,12 +216,15 @@ class DiffusionRoll(nn.Module):
             sigma0 = edm_sigma_from_ramp(ramp0, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
             sigma0_map = make_sigma_map(sigma0, cur_x0.shape, self.time_dim)       # [B,1,...,W,...,1]
 
-            # warm-start: init_x0 주변에서 시작
-            if warm_start_noise == 0.0:
-                x = cur_x0.clone()
-            else:
-                eps0 = torch.randn_like(cur_x0)
-                x = cur_x0 + (warm_start_noise * sigma0_map * eps0)
+            eps0 = torch.randn_like(cur_x0)
+            x = cur_x0 + (sigma0_map * eps0)
+
+            null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)
+            len_uncond = torch.ones(B, device=device, dtype=torch.long)
+
+            cond_cat = torch.cat([condition, null_ctx], dim=0)
+            condlen_cat = torch.cat([condition_len, len_uncond], dim=0)
+            # text_timing_cat = torch.cat([text_timing, text_timing], dim=0)
 
             # Heun 적분
             for i in range(N - 1):
@@ -218,39 +240,39 @@ class DiffusionRoll(nn.Module):
                 sb   = make_sigma_map(sigma_i,   cur_x0.shape, self.time_dim)
                 sb_n = make_sigma_map(sigma_nxt, cur_x0.shape, self.time_dim)
 
-                h = (sb_n - sb)
+                dt = sb_n - sb
 
                 # Euler
-                x0_c = self.denoiser(x, sb, condition)
-                if cfg_scale != 1.0:
-                    x0_u = self.denoiser(x, sb, None)
-                    x0   = cfg_combine(x0_c, x0_u, cfg_scale)
-                else:
-                    x0 = x0_c
+                x_cat = torch.cat([x, x], dim=0)
+                sigma_cat = torch.cat([sb, sb], dim=0)
+
+
+                x0_both = self.denoiser(x_cat, sigma_cat, cond_cat, condlen_cat, None)
+                x0_c, x0_u = x0_both[:B], x0_both[B:]
+                x0 = x0_u + cfg_scale * (x0_c - x0_u)
+
                 d_cur  = ode_drift_from_x0(x, sb, x0)
-                x_eul  = x + h * d_cur
+                x_eul  = x + d_cur * dt
 
                 if i < N - 1:  
                     # Heun correction
-                    x0_c_n = self.denoiser(x_eul, sb_n, condition)
-                    if cfg_scale != 1.0:
-                        x0_u_n = self.denoiser(x_eul, sb_n, None)
-                        x0_n   = cfg_combine(x0_c_n, x0_u_n, cfg_scale)
-                    else:
-                        x0_n = x0_c_n
+                    x_eul_cat = torch.cat([x, x], dim=0)
+                    sigma_nxt_cat = torch.cat([sb, sb], dim=0)
+                    x0_c_n = self.denoiser(x_eul_cat, sigma_nxt_cat, cond_cat, condlen_cat, None)
+                    x0_u_n, x0_c_n = x0_c_n[:B], x0_c_n[B:]
+                    x0_n = x0_u_n + cfg_scale * (x0_c_n - x0_u_n)
 
                     d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
-                    x = x + 0.5 * h * (d_cur + d_next)
-
-            next_x = x  # σ→0 한계에서 clean 근사
+                    x = x + 0.5 * dt * (d_cur + d_next)
 
             # 최종 clean 윈도우
-            next_x0 = next_x
+            next_x0 = x
 
             # ---- 2) 앞쪽 hop 프레임을 외부로 배출 ----
             # 남은 필요 길이만큼 잘라 배출
             emit_len = min(hop, total_frames - produced)
-            emit_chunk = next_x0.narrow(self.time_dim, 0, emit_len)  # (B,emit_len,C,...)
+            # emit_chunk = next_x0.narrow(self.time_dim, 0, emit_len)  # (B,emit_len,C,...)
+            emit_chunk = x[:, :emit_len]
             chunks.append(emit_chunk)
             produced += emit_len
             if produced >= total_frames:
@@ -258,11 +280,13 @@ class DiffusionRoll(nn.Module):
 
             # ---- 3) 윈도우 슬라이드: 앞 hop을 버리고, 뒤에 노이즈 hop 프레임 붙이기 ----
             # prefix: next_x0[:, :, hop:, ...]  (길이 W - hop)
+
             prefix = next_x0.narrow(self.time_dim, hop, self.W - hop)
+            prefix = x[:, hop:]
             # tail noise clean (B, hop, C, ...)
-            tail_shape = list(next_x0.shape)
+            tail_shape = list(x.shape)
             tail_shape[self.time_dim] = hop
-            tail_noise = torch.randn(tail_shape, device=device) * tail_noise_std
+            tail_noise = torch.randn(tail_shape, device=device)
 
             # 다음 루프의 cur_x0
             cur_x0 = torch.cat([prefix, tail_noise], dim=self.time_dim)

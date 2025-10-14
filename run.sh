@@ -108,4 +108,7 @@ CUDA_VISIBLE_DEVICES=1 python train_t2m_initializer.py --num_workers 50 --datana
 
 
 
-CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser05_roll_ln12 --denoiser_block 5 --denoiser_num_layers 12 --lr 2e-4
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl4 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 4
+CUDA_VISIBLE_DEVICES=1 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl8 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 8
+CUDA_VISIBLE_DEVICES=2 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl12 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 12
+CUDA_VISIBLE_DEVICES=3 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl16 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 16

@@ -131,6 +131,91 @@ class Block05(nn.Module):
 
 
 
+class Block06(nn.Module):
+    def __init__(self, cfg, num_heads, latent_dim, dropout, norm, activation, conv_mlp):
+        super().__init__()                
+        self.explain = "Block06: Adjust operation order, with causal self-attention."
+        self.latent_dim = latent_dim
+        self.num_heads = num_heads
+        self.dropout = nn.Dropout(dropout)
+
+        # Self-attention (causal)
+        self.self_attn = nn.MultiheadAttention(embed_dim=latent_dim, num_heads=num_heads, dropout=dropout, batch_first=True)
+
+        # Cross-attention (text as KV)
+        self.cross_attn_text = nn.MultiheadAttention(embed_dim=latent_dim, num_heads=num_heads, dropout=dropout, batch_first=True)
+        
+        # Cross-attention (text as KV, PE[text timing] as Q)
+        self.cross_attn_text_time = nn.MultiheadAttention(embed_dim=latent_dim, num_heads=num_heads, dropout=dropout, batch_first=True)
+        self.text_time_PE = PositionalEncoding(latent_dim, dropout=dropout, max_len=1000, batch_first=True)(torch.zeros((1, 1000, latent_dim)))
+
+        # Normalizations
+        self.norm_sa = nn.LayerNorm(latent_dim)
+        self.norm_ca_text = nn.LayerNorm(latent_dim)
+        self.norm_ca_text_time = nn.LayerNorm(latent_dim)
+        self.norm_ff = nn.LayerNorm(latent_dim)
+
+        # AdaLN modulations
+        self.mod_sa_sigma = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(latent_dim, 2 * latent_dim)
+        )
+        self.mod_ca = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(latent_dim, 2 * latent_dim)
+        )
+        self.mod_ff_sigma = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(latent_dim, 2 * latent_dim)
+        )
+
+        # Feed-forward network
+        hidden_multiplier = int(getattr(cfg, "denoiser_ff_mult", 4))
+        hidden_dim = hidden_multiplier * latent_dim
+
+        if conv_mlp:
+            self.ff = Conv1D_MLP_causal(latent_dim, latent_dim, hidden_multiplier, resid_pdrop=dropout)
+        else:
+            self.ff = nn.Sequential(
+                nn.Linear(latent_dim, hidden_dim),
+                nn.GELU() if getattr(cfg, "denoiser_activation", "gelu") == "gelu" else nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, latent_dim)
+            )
+    
+    def forward(self, x, sigma_enc, condition, condition_len, text_timing):
+        B, T, C = x.shape
+        # ----- AdaLN with sigma_enc -----
+        gam_beta_sa = self.mod_sa_sigma(sigma_enc)  # [B, 2C]
+        gamma_sa, beta_sa = gam_beta_sa.chunk(2, dim=-1)
+        x = self.norm_sa(x)
+        x = x * (1 + gamma_sa) + beta_sa
+
+        # ----- Self-Attention -----
+        attn_mask = torch.triu(torch.ones(T, T, device=x.device, dtype=torch.bool), diagonal=1)
+        sa_out, _ = self.self_attn(x, x, x, attn_mask=attn_mask)
+        x = x + sa_out
+        
+        # ----- Cross-Attention (text) -----
+        L = condition.shape[1]
+        idxs = torch.arange(L, device=x.device).unsqueeze(0)  # [1, L]
+        key_padding_mask = idxs >= condition_len.view(-1, 1)  # [B, L] True -> PAD
+        x = self.norm_ca_text(x)
+        ca_out, _ = self.cross_attn_text(x, condition, condition, key_padding_mask=key_padding_mask)
+        x = x + ca_out
+
+        # ----- Feed-Forward + Norm+AdaLN -----
+        x = self.norm_ff(x)
+        ff_out = self.ff(x)
+        x = x + ff_out
+        # gam_beta_ff = self.mod_ff_sigma(sigma_enc).unsqueeze(1)
+        # gamma_ff, beta_ff = gam_beta_ff.chunk(2, dim=-1)
+        # x = x_ff * (1 + gamma_ff) + beta_ff
+        
+        return x
+
+
+
 class DenoiserRoll(nn.Module):
     def __init__(self, cfg):
         super().__init__()

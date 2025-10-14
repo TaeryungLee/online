@@ -114,7 +114,7 @@ net = LatentSpaceVAE(
     latent_dim=args.latent_dim,
     clip_range=clip_range
 )
-
+net = net.to(comp_device)
 diffusion = DiffusionRoll(args)
 
 if args.resume is not None:
