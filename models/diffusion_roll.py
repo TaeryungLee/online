@@ -11,7 +11,7 @@ from models.denoiser_roll import DenoiserRoll
 
 def erdm_ramp(t, w, W: int, k: int):
     """
-    ERDM ramp: r = 1 - (k*t - w)/(W-k)
+    ERDM ramp: r = 1 - (w-1-(k-1)*t)/(W-k-1)
     - t: [B,1] in [0,1] (continuous) or [B] (자동 확장)
     - w: [1,W] (0..W-1)
     반환: [B,W] in [0,1]
@@ -22,8 +22,8 @@ def erdm_ramp(t, w, W: int, k: int):
         t = t[:, None]  # [B,1]
     device = t.device
     w = torch.as_tensor(w, dtype=torch.float32, device=device)  # [1,W]
-    denom = max(W - k, 1e-6)
-    r = 1.0 - (k * t - w) / denom          # [B,W]
+    denom = max(W - k - 1, 1e-6)
+    r = 1 - (w-1-(k-1)*t) / denom          # [B,W]
     return r.clamp_(0.0, 1.0)
 
 
@@ -95,8 +95,8 @@ class DiffusionRoll(nn.Module):
 
         # Shapes
         self.time_dim   = 1  # (B,C,T,...)에서 T의 인덱스
-        self.W          = int(getattr(cfg, "W", 16))        # window size (훈련/샘플 모두 동일 예상)
-        self.k          = int(getattr(cfg, "k", 4))         # overlap (0 < k < W)
+        self.W          = int(getattr(cfg, "window_size", 64))        # window size (훈련/샘플 모두 동일 예상)
+        self.k          = int(getattr(cfg, "overlap_size", 16))         # overlap (0 < k < W)
 
         # EDM params
         self.sigma_data = float(getattr(cfg, "sigma_data", 0.5))
@@ -110,7 +110,7 @@ class DiffusionRoll(nn.Module):
 
 
     # ---------- TRAIN ----------
-    def forward(self, target, condition):
+    def forward(self, target, condition, condition_len, text_timing=None):
         """
         target: x0 clean, shape (B, C, T, ...)
         condition: any (B, ...)
@@ -119,7 +119,6 @@ class DiffusionRoll(nn.Module):
         B = target.shape[0]
         T = target.shape[self.time_dim]
         device = target.device
-
         # 윈도우 길이 일치 확인 (필요시 W를 T에 맞춰 자동 업데이트)
         if T != self.W:
             # 보수적으로 assert; 자동 동기화 원하면 아래 한 줄로 교체:
@@ -135,6 +134,7 @@ class DiffusionRoll(nn.Module):
         w = torch.arange(self.W, device=device, dtype=torch.float32)[None, :]  # [1,W]
 
         # 3) ramp & frame-wise σ: [B,W]
+        breakpoint()
         ramp_bw = erdm_ramp(t, w, self.W, self.k)                                      # [B,W]
         sigma_bw = edm_sigma_from_ramp(ramp_bw, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
 
@@ -146,13 +146,14 @@ class DiffusionRoll(nn.Module):
         x_noisy = target + sigma_map * noise
 
         # 6) x0 예측 (sigma는 frame-wise 텐서로 전달: 브로드캐스트 가정)
-        pred_x0 = self.denoiser(x_noisy, sigma_map, condition)                          # (B, C, T, ...)
+        pred_x0 = self.denoiser(x_noisy, sigma_map, condition, condition_len, text_timing)                          # (B, C, T, ...)
 
         # 7) EDM weighted MSE
         # weight = (σ^2 + σ_data^2) / (σ * σ_data)^2  (elementwise)
         w_edm = (sigma_map**2 + (self.sigma_data**2)) / ((sigma_map * self.sigma_data)**2)
         loss = w_edm * (pred_x0 - target) ** 2
         loss = loss.view(B, -1).mean(dim=1)                                             # per-sample
+
         return loss.mean(), pred_x0
 
 

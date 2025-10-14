@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from models.denoiser_init import DenoiserInit
 from tqdm import tqdm
+from diffusers import EDMEulerScheduler
+
 
 # ---------- EDM utilities ----------
 def edm_sigma_from_ramp(ramp, sigma_min=0.002, sigma_max=80.0, rho=7.0):
@@ -56,6 +58,18 @@ class DiffusionInit(nn.Module):
         # optional: small stochasticity (off by default)
         self.P_mean     = float(getattr(cfg, "P_mean", -1.2))
         self.P_std      = float(getattr(cfg, "P_std",  1.2))
+        self.scheduler = EDMEulerScheduler(
+            sigma_min=self.sigma_min,
+            sigma_max=self.sigma_max,
+            sigma_data=self.sigma_data,
+            rho=self.rho,                  # Karras rho
+            # prediction_type="epsilon"    # 기본값: epsilon
+        )
+        
+        null_dim = self.cfg.text_dim if self.cfg.text_dim is not None else self.cfg.latent_dim
+        self.null_ctx = nn.Parameter(torch.zeros(1, 1, null_dim))  # L_null=1
+        nn.init.normal_(self.null_ctx, std=0.02)
+
 
     # ---------------- TRAIN ----------------
     def forward(self, target, condition, condition_len):
@@ -67,28 +81,45 @@ class DiffusionInit(nn.Module):
         B = target.shape[0]
         device = target.device
 
-        # t는 추론 격자 {i/(N-1)}에서 샘플 (스케줄 미스매치 제거)
-        # N = max(int(self.num_timesteps), 2)
-        # idx = torch.randint(low=0, high=N, size=(B,), device=device)      # [B] ∈ {0..N-1}
-        # t = idx.to(torch.float32) / (N - 1)                                # [B] ∈ {i/(N-1)}
+        # ----- σ 샘플링: 50% 스케줄러 격자 / 50% log-normal -----
+        use_grid = torch.rand((), device=device) < 0.5
 
-        # # σ (배치 스칼라) → target과 브로드캐스트
-        # sigma = edm_sigma_from_ramp(t, self.sigma_min, self.sigma_max, self.rho)  # [B]
+        if use_grid:
+            # 스케줄러 격자에서 임의 σ 샘플 (마지막 0 제외)
+            self.scheduler.set_timesteps(self.num_timesteps, device=device)
+            train_sigmas = self.scheduler.sigmas.to(device=device)[:-1]  # [N] (0 제외)
+            idx = torch.randint(0, train_sigmas.shape[0], (B,), device=device)
+            sigma = train_sigmas[idx].to(dtype=target.dtype)  # [B]
+        else:
+            # 기존 log-normal 샘플링
+            rnd = torch.randn(B, 1, 1, 1, device=device, dtype=target.dtype)
+            sigma = torch.exp(self.P_mean + self.P_std * rnd).view(B)  # [B]
 
-        rnd = torch.randn(B, 1, 1, 1, device=device)
-        sigma = torch.exp(self.P_mean + self.P_std * rnd).view(B)  # [B]
-        sigma_b = sigma.view(B, *([1] * (target.dim() - 1)))                      # [B,1,1,...]
 
         # 노이즈 주입 (VE)
         noise = torch.randn_like(target)
+        sigma_b = sigma.view(B, *([1] * (target.dim() - 1)))          # [B,1,1,...]
         x_noisy = target + sigma_b * noise
 
         # x0 예측 (CFG during training controlled by self.cfg.cfg)
-        cfg_scale = float(getattr(self.cfg, "cfg", 1.0))
-        x0_c = self.denoiser(x_noisy, sigma, condition, condition_len)
-        if cfg_scale != 1.0:
-            x0_u = self.denoiser(x_noisy, sigma, None, condition_len)
-            pred_xstart = cfg_combine(x0_c, x0_u, cfg_scale)
+
+        # uncond용 null context / 길이
+        null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)           # [B, 1, C_txt]
+        len_uncond = torch.ones(B, device=device, dtype=torch.long)   # [B]
+
+        # 배치 결합 (x, sigma, condition, condition_len)
+        x_cat         = torch.cat([x_noisy, x_noisy], dim=0)          # [2B, ...]
+        sigma_cat     = torch.cat([sigma,   sigma],   dim=0)          # [2B]
+        cond_cat      = torch.cat([condition, null_ctx], dim=0) if condition is not None else torch.cat([null_ctx, null_ctx], dim=0)
+        condlen_cat   = torch.cat([condition_len, len_uncond], dim=0) if condition_len is not None else torch.cat([len_uncond, len_uncond], dim=0)
+
+        # 한 번의 forward로 x0_u, x0_c 동시 계산
+        x0_both = self.denoiser(x_cat, sigma_cat, cond_cat, condlen_cat)  # [2B, ...]
+        x0_c = x0_both[:B]   # 주의: cond 먼저/나중 순서는 위 cat 순서에 맞춰 선택
+        x0_u = x0_both[B:]
+
+        if self.cfg.cfg != 1.0:
+            pred_xstart = x0_u + self.cfg.cfg * (x0_c - x0_u)
         else:
             pred_xstart = x0_c
 
