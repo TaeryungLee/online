@@ -11,7 +11,7 @@ def get_args_parser():
     parser.add_argument('--latent_dir', type=str, default='latents/t2m_latents', help='latent directory')
     parser.add_argument('--unit_length', type=int, default=1, help='unit length')
     parser.add_argument('--window-size', type=int, default=64, help='training motion length')
-    parser.add_argument('--overlap-size', type=int, default=16, help='overlap size')
+    parser.add_argument('--overlap-size', type=int, default=8, help='overlap size')
     parser.add_argument('--dim_pose', type=int, default=272, help='dimension of pose')
 
 
@@ -48,7 +48,7 @@ def get_args_parser():
     parser.add_argument('--rho_init', type=float, default=7.0, help='rho init')
     parser.add_argument('--heun_churn', type=float, default=0.0, help='heun churn')
 
-    parser.add_argument('--denoiser_block', type=int, default=1)
+    parser.add_argument('--denoiser_block', type=int, default=5)
     parser.add_argument('--denoiser_num_layers', type=int, default=12, help='number of layers')
     parser.add_argument('--denoiser_num_heads', type=int, default=8, help='number of heads')
     parser.add_argument('--denoiser_hidden_size', type=int, default=512, help='hidden size')

@@ -143,8 +143,6 @@ while nb_iter <= args.total_iter:
 
     loss, pred_xstart = diffusion(m_tokens, caption_enc, caption_enc_len, idxs)
 
-    breakpoint()
-
 
     optimizer.zero_grad()
     loss.backward()

@@ -11,7 +11,7 @@ from models.denoiser_roll import DenoiserRoll
 
 def erdm_ramp(t, w, W: int, k: int):
     """
-    ERDM ramp: r = 1 - (w-1-(k-1)*t)/(W-k-1)
+    ERDM ramp: r = 1 - ((w - t(k+1) - k) / (W - 2k - 1))
     - t: [B,1] in [0,1] (continuous) or [B] (자동 확장)
     - w: [1,W] (0..W-1)
     반환: [B,W] in [0,1]
@@ -22,8 +22,8 @@ def erdm_ramp(t, w, W: int, k: int):
         t = t[:, None]  # [B,1]
     device = t.device
     w = torch.as_tensor(w, dtype=torch.float32, device=device)  # [1,W]
-    denom = max(W - k - 1, 1e-6)
-    r = 1 - (w-1-(k-1)*t) / denom          # [B,W]
+    denom = max(W - 2*k - 1, 1e-6)
+    r = 1 - ((w - t*(k + 1) - k) / denom)          # [B,W]
     return r.clamp_(0.0, 1.0)
 
 
@@ -96,7 +96,7 @@ class DiffusionRoll(nn.Module):
         # Shapes
         self.time_dim   = 1  # (B,C,T,...)에서 T의 인덱스
         self.W          = int(getattr(cfg, "window_size", 64))        # window size (훈련/샘플 모두 동일 예상)
-        self.k          = int(getattr(cfg, "overlap_size", 16))         # overlap (0 < k < W)
+        self.k          = int(getattr(cfg, "overlap_size", 8))-1         # overlap (0 < k < W)
 
         # EDM params
         self.sigma_data = float(getattr(cfg, "sigma_data", 0.5))
@@ -105,8 +105,7 @@ class DiffusionRoll(nn.Module):
         self.rho        = float(getattr(cfg, "rho", 7.0))
 
         # Sampler
-        self.num_timesteps = int(getattr(cfg, "num_timesteps", 18))
-        self.heun_churn_default = float(getattr(cfg, "heun_churn", 0.0))
+        self.num_timesteps = int(getattr(cfg, "num_timesteps", 32))
 
 
     # ---------- TRAIN ----------
@@ -119,22 +118,16 @@ class DiffusionRoll(nn.Module):
         B = target.shape[0]
         T = target.shape[self.time_dim]
         device = target.device
-        # 윈도우 길이 일치 확인 (필요시 W를 T에 맞춰 자동 업데이트)
-        if T != self.W:
-            # 보수적으로 assert; 자동 동기화 원하면 아래 한 줄로 교체:
-            # self.W = T
-            raise ValueError(f"target time length {T} must equal W {self.W}")
 
         # 1) t sample
         N = int(self.num_timesteps)
         idx = torch.randint(low=0, high=N, size=(B,), device=target.device)   # [B] 정수 인덱스
-        t = idx.to(torch.float32) / max(N - 1, 1)       
+        t = idx.to(torch.float32) / N      
 
         # 2) w = [0..W-1] (공유)
         w = torch.arange(self.W, device=device, dtype=torch.float32)[None, :]  # [1,W]
 
         # 3) ramp & frame-wise σ: [B,W]
-        breakpoint()
         ramp_bw = erdm_ramp(t, w, self.W, self.k)                                      # [B,W]
         sigma_bw = edm_sigma_from_ramp(ramp_bw, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
 
@@ -153,7 +146,6 @@ class DiffusionRoll(nn.Module):
         w_edm = (sigma_map**2 + (self.sigma_data**2)) / ((sigma_map * self.sigma_data)**2)
         loss = w_edm * (pred_x0 - target) ** 2
         loss = loss.view(B, -1).mean(dim=1)                                             # per-sample
-
         return loss.mean(), pred_x0
 
 
