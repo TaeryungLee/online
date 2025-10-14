@@ -58,7 +58,7 @@ def get_args_parser():
     parser.add_argument('--denoiser_conv_mlp', type=bool, default=True, help='conv mlp')
     parser.add_argument('--denoiser_ff_mult', type=int, default=4, help='ff mult')
     parser.add_argument('--text_dim', type=int, default=1024, help='text dimension')
-    parser.add_argument('--cfg', type=float, default=4.0, help='classifier free guidance scale (1.0 = off)')
+    parser.add_argument('--cfg', type=float, default=2.0, help='classifier free guidance scale (1.0 = off)')
 
 
 
