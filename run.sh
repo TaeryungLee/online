@@ -108,3 +108,4 @@ CUDA_VISIBLE_DEVICES=1 python train_t2m_initializer.py --num_workers 50 --datana
 
 
 
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser05_roll_ln12 --denoiser_block 5 --denoiser_num_layers 12 --lr 2e-4

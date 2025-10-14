@@ -161,6 +161,7 @@ class DiffusionRoll(nn.Module):
         warm_start_noise: float = 1.0,   # 0이면 완전 보존, 1이면 표준 노이즈 주입
         tail_noise_std: float = 1.0,     # 뒤에 붙일 tail 노이즈 표준편차
     ):
+        breakpoint()
         """
         k//2 프레임씩 윈도우를 뒤로 밀면서 스트리밍 롤아웃.
         - 각 윈도우는 Heun ODE(EDM) + frame-wise σ 스케줄로 clean을 생성.
@@ -174,7 +175,7 @@ class DiffusionRoll(nn.Module):
         assert T == self.W, f"init_x0 time length {T} must equal W {self.W}"
         device = init_x0.device
 
-        hop = max(self.k // 2, 1)
+        hop = self.k
         N = int(num_steps or self.num_timesteps)
         churn = self.heun_churn_default if heun_churn is None else heun_churn
 

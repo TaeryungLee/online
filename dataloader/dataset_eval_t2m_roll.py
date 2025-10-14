@@ -173,6 +173,13 @@ class Text2MotionDataset(data.Dataset):
         # Motion Normalization
         motion = (motion - self.mean) / self.std
 
+        # Pad motion to max_motion_length
+        if m_length < self.max_motion_length:
+            motion = np.concatenate([
+                motion,
+                np.zeros((self.max_motion_length - m_length, motion.shape[1]))
+            ], axis=0)
+
         return caption, motion, m_length, caption_enc, caption_enc_len
 
 

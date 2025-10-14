@@ -432,6 +432,170 @@ def evaluation_transformer_272_single(
 
     return best_fid_ret, best_diversity_pred, r1, r2, r3, best_match_ret, logger
 
+# Single-GPU evaluation of text to motion model (test time)：
+@torch.no_grad()                
+def evaluation_transformer_272_roll(
+    val_loader,
+    latent_model,
+    denoiser,
+    logger,
+    evaluator,
+    device=torch.device('cuda'),
+    unit_length=4,
+    prev_best_fid=None,
+    prev_best_div=None,
+    prev_best_rprecision_pred=None,
+    prev_best_matching_score_pred=None,
+    draw=False,
+    vis_dir=None,
+):     
+    textencoder, motionencoder = evaluator
+    denoiser.eval()
+    
+    draw_orig = []
+    draw_pred = []
+    draw_text = []
+    draw_text_pred = []
+
+    motion_annotation_list = []
+    motion_pred_list = []
+    R_precision_real = torch.tensor([0,0,0], device=device)
+    R_precision = torch.tensor([0,0,0], device=device)
+    matching_score_real = torch.tensor(0.0, device=device)
+    matching_score_pred = torch.tensor(0.0, device=device)
+
+    nb_sample = torch.tensor(0, device=device)
+
+    # Visualization resources
+    smpl_model = None
+    if draw and vis_dir is not None:
+        smpl_model = SMPL(model_path='./human_models/smpl')
+    for batch in tqdm(val_loader, desc='Evaluating'):
+        text, pose, m_length, caption_enc, caption_enc_len = batch
+        bs, seq = pose.shape[:2]
+        num_joints = 22
+        pred_pose_eval = torch.zeros((bs, seq, pose.shape[-1])).to(device)
+        pred_len = torch.ones(bs).long()
+        
+        caption_enc, caption_enc_len = caption_enc.to(device), caption_enc_len.to(device)
+
+        # Batched generation: use max target length in batch, then slice
+        motion_length_max = int(m_length.max().item()) if torch.is_tensor(m_length) else int(max(m_length))
+        # TODO: 여기서부터 계속 수정 필요, 일단 init부터 고치고서.
+        index_motion = denoiser.sample(caption_enc, caption_enc_len, motion_length=motion_length_max)
+        pred_pose = latent_model.forward_decoder(index_motion)  # [B, T, D]
+        # cur_len = pred_pose.shape[1]
+        # fill_len = min(cur_len, seq)
+        # pred_len = torch.full((bs,), fill_len, dtype=torch.long, device=device)
+        # pred_pose_eval[:, :fill_len] = pred_pose[:, :fill_len]
+
+        for k in range(bs):
+            pred_pose_eval[k:k+1, :m_length[k]] = pred_pose[k:k+1, :m_length[k]]
+
+        # Optional visualization (up to first 3 samples)
+        if draw:
+            try:
+                for k in range(min(3, bs)):
+                    length_k = int(m_length[k].item()) if torch.is_tensor(m_length) else int(m_length[k])
+                    gt_denorm = val_loader.dataset.inv_transform(pose[k:k+1, :length_k, :].detach().cpu().numpy())
+                    pred_denorm = val_loader.dataset.inv_transform(pred_pose[k:k+1, :length_k].detach().cpu().numpy())
+                    visualize_smpl_85(recover_from_local_rotation(gt_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'gt_{k}')
+                    visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'pred_{k}')
+            except Exception:
+                pass
+            draw = False
+        et_pred, em_pred = textencoder(text).loc, motionencoder(pred_pose_eval, pred_len).loc
+        
+        pose = pose.to(device).float()
+        et, em = textencoder(text).loc, motionencoder(pose, m_length).loc
+        motion_annotation_list.append(em)
+        motion_pred_list.append(em_pred)
+
+        temp_R, temp_match = calculate_R_precision(et.cpu().numpy(), em.cpu().numpy(), top_k=3, sum_all=True)
+        R_precision_real += torch.tensor(temp_R, device=device)
+        matching_score_real += torch.tensor(temp_match, device=device)
+        temp_R, temp_match = calculate_R_precision(et_pred.cpu().numpy(), em_pred.cpu().numpy(), top_k=3, sum_all=True)
+        R_precision += torch.tensor(temp_R, device=device)
+        matching_score_pred += torch.tensor(temp_match, device=device)
+        nb_sample += et.shape[0]
+
+        pose = torch.tensor(pose).to(device)
+    
+    motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
+    motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
+    
+    gt_mu, gt_cov = calculate_activation_statistics(motion_annotation_np)
+    mu, cov = calculate_activation_statistics(motion_pred_np)
+
+    diversity_real = calculate_diversity(motion_annotation_np, 300 if nb_sample > 300 else 100)
+    diversity = calculate_diversity(motion_pred_np, 300 if nb_sample > 300 else 100)
+
+    R_precision_real = R_precision_real / nb_sample
+    R_precision = R_precision / nb_sample
+    matching_score_real = matching_score_real / nb_sample
+    matching_score_pred = matching_score_pred / nb_sample
+    fid = calculate_frechet_distance(gt_mu, gt_cov, mu, cov)
+
+    msg = f"--> \t Eval. :, FID. {fid:.4f}, Diversity Real. {diversity_real:.4f}, Diversity Pred. {diversity:.4f}, R_precision Real. {R_precision_real}, R_precision Pred. {R_precision}, MM-dist (matching_score) Real. {matching_score_real}, MM-dist (matching_score) Pred. {matching_score_pred}"
+    logger.info(msg)
+
+    # Determine updated bests if previous bests are provided (lower is better for FID and matching score; higher is better for R-precision)
+    # Keep return signature stable by returning updated-bests when prev bests provided; otherwise, return current metrics
+    best_fid_ret = fid
+    if prev_best_fid is not None:
+        try:
+            prev_best_fid_val = float(prev_best_fid)
+            if fid < prev_best_fid_val:
+                logger.info(f"--> --> \t FID Improved from {prev_best_fid_val:.4f} to {fid:.4f} !!!")
+            best_fid_ret = min(prev_best_fid_val, float(fid))
+        except Exception:
+            best_fid_ret = float(fid)
+
+    # R-precision (vector of length 3): maximize each @k
+    best_rprec_ret = R_precision.clone() if isinstance(R_precision, torch.Tensor) else torch.tensor(R_precision)
+    if prev_best_rprecision_pred is not None:
+        try:
+            prev_r = torch.as_tensor(prev_best_rprecision_pred, dtype=best_rprec_ret.dtype, device=best_rprec_ret.device)
+            prev_r = prev_r.view(-1)[:3]
+            for idx, k in enumerate([1, 2, 3]):
+                if best_rprec_ret[idx].item() > prev_r[idx].item():
+                    logger.info(f"--> --> \t R_precision@{k} Pred Improved from {prev_r[idx].item():.4f} to {best_rprec_ret[idx].item():.4f} !!!")
+            best_rprec_ret = torch.maximum(best_rprec_ret, prev_r)
+        except Exception:
+            best_rprec_ret = best_rprec_ret
+
+    # Matching score (lower is better)
+    best_match_ret = matching_score_pred
+    if prev_best_matching_score_pred is not None:
+        try:
+            prev_match_val = float(prev_best_matching_score_pred)
+            if matching_score_pred.item() < prev_match_val:
+                logger.info(f"--> --> \t MM-dist Pred Improved from {prev_match_val:.4f} to {matching_score_pred.item():.4f} !!!")
+            best_match_ret = min(prev_match_val, matching_score_pred.item())
+        except Exception:
+            best_match_ret = matching_score_pred.item() if isinstance(matching_score_pred, torch.Tensor) else float(matching_score_pred)
+
+    if prev_best_div is not None:
+        try:
+            prev_div_val = float(prev_best_div)
+            if diversity > prev_div_val:
+                logger.info(f"--> --> \t Diversity Pred Improved from {prev_div_val:.4f} to {diversity:.4f} !!!")
+            best_diversity_ret = max(prev_div_val, float(diversity))
+        except Exception:
+            best_diversity_ret = float(diversity)
+    else:
+        best_diversity_ret = float(diversity)
+
+    # Convert return types to primitive floats where appropriate
+    best_fid_ret = float(best_fid_ret)
+    best_diversity_pred = float(best_diversity_ret)
+    r1 = float(best_rprec_ret[0].item())
+    r2 = float(best_rprec_ret[1].item())
+    r3 = float(best_rprec_ret[2].item())
+    best_match_ret = float(best_match_ret)
+
+    return best_fid_ret, best_diversity_pred, r1, r2, r3, best_match_ret, logger
+
 def euclidean_distance_matrix(matrix1, matrix2):
     assert matrix1.shape[1] == matrix2.shape[1]
     d1 = -2 * np.dot(matrix1, matrix2.T)    

@@ -134,6 +134,7 @@ diffusion = DiffusionInit(args)
 
 
 if args.resume is not None:
+    args.resume = os.path.join(args.out_dir, args.resume)
     print('loading transformer checkpoint from {}'.format(args.resume))
     ckpt = torch.load(args.resume, map_location='cpu')
     new_ckpt_denoiser = {}
@@ -146,7 +147,6 @@ if args.resume is not None:
     diffusion.load_state_dict(new_ckpt_denoiser, strict=True)
 diffusion.train()
 diffusion.to(comp_device)
-
 
 ##### ---- Evaluator ---- #####
 
@@ -252,7 +252,7 @@ while nb_iter <= args.total_iter:
             prev_best_div=best_div,
             prev_best_rprecision_pred=[best_top1, best_top2, best_top3],
             prev_best_matching_score_pred=best_matching,
-            draw=True,
+            draw=args.vis_eval,
             vis_dir=eval_vis_dir,
         )
         # Save best FID checkpoint if improved

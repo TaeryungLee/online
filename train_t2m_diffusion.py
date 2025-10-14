@@ -22,8 +22,16 @@ from transformers import AutoTokenizer, AutoModel
 from Evaluator_272.mld.models.architectures.temos.textencoder.distillbert_actor import DistilbertActorAgnosticEncoder
 from Evaluator_272.mld.models.architectures.temos.motionencoder.actor import ActorAgnosticEncoder
 from collections import OrderedDict
-from utils.eval_trans import evaluation_transformer_272_single
+from utils.eval_trans import evaluation_transformer_272_single, evaluation_transformer_272_roll
 from Evaluator_272 import mld
+import sys
+import importlib
+if 'mld' not in sys.modules:
+    try:
+        sys.modules['mld'] = importlib.import_module('Evaluator_272.mld')
+    except Exception:
+        pass
+
 
 
 warnings.filterwarnings('ignore')
@@ -112,14 +120,14 @@ diffusion = DiffusionRoll(args)
 if args.resume is not None:
     print('loading transformer checkpoint from {}'.format(args.resume))
     ckpt = torch.load(args.resume, map_location='cpu')
-    new_ckpt_denoiser = {}
-    for key in ckpt['denoiser'].keys():
+    new_ckpt_diffusion = {}
+    for key in ckpt['diffusion'].keys():
         if key.split('.')[0]=='module':
             new_key = '.'.join(key.split('.')[1:])
         else:
             new_key = key
-        new_ckpt_denoiser[new_key] = ckpt['denoiser'][key]
-    diffusion.load_state_dict(new_ckpt_denoiser, strict=True)
+        new_ckpt_diffusion[new_key] = ckpt['diffusion'][key]
+    diffusion.load_state_dict(new_ckpt_diffusion, strict=True)
 diffusion.train()
 diffusion.to(comp_device)
 
@@ -131,8 +139,53 @@ scheduler = WarmupCosineDecayScheduler(optimizer, args.total_iter//10, args.tota
 
 
 
+##### ---- Evaluator ---- #####
+
+
+modelpath = 'distilbert-base-uncased'
+
+textencoder = DistilbertActorAgnosticEncoder(modelpath, num_layers=4, latent_dim=256)
+motionencoder = ActorAgnosticEncoder(nfeats=272, vae = True, num_layers=4, latent_dim=256, max_len=300)
+
+ckpt_path = 'checkpoints/evaluator/'
+ckpt_path += 'hml_epoch=99.ckpt' if args.dataname == 't2m_272' else 'babel_epoch=69.ckpt'
+print(f'Loading evaluator checkpoint from {ckpt_path}')
+ckpt = torch.load(ckpt_path)
+# load textencoder
+textencoder_ckpt = {}
+for k, v in ckpt['state_dict'].items():
+    if k.split(".")[0] == "textencoder":
+        name = k.replace("textencoder.", "")
+        textencoder_ckpt[name] = v
+textencoder.load_state_dict(textencoder_ckpt, strict=True)
+textencoder.eval()
+textencoder.to(comp_device)
+
+# load motionencoder
+motionencoder_ckpt = {}
+for k, v in ckpt['state_dict'].items():
+    if k.split(".")[0] == "motionencoder":
+        name = k.replace("motionencoder.", "")
+        motionencoder_ckpt[name] = v
+motionencoder.load_state_dict(motionencoder_ckpt, strict=True)
+motionencoder.eval()
+motionencoder.to(comp_device)
+#--------------------------------
+
+evaluator = [textencoder, motionencoder]
+
+
+
+
 ##### ---- Training Loop ---- #####
 nb_iter, avg_loss = 0, 0.
+
+# Track best metrics across evaluations
+best_fid = float('inf')
+best_div = 0.0
+best_top1, best_top2, best_top3 = 0.0, 0.0, 0.0
+best_matching = float('inf')
+
 
 while nb_iter <= args.total_iter:
     batch = next(train_loader_iter)
@@ -152,7 +205,6 @@ while nb_iter <= args.total_iter:
     avg_loss = avg_loss + loss.item()
 
     nb_iter += 1
-    args.print_iter = 100
     if nb_iter % args.print_iter ==  0 :
         avg_loss = avg_loss / args.print_iter
         writer.add_scalar('./Loss/train', avg_loss, nb_iter)
@@ -162,14 +214,69 @@ while nb_iter <= args.total_iter:
         avg_loss = 0.
 
 
-    args.save_iter = 10000
-    if nb_iter % args.save_iter == 0:
+    if nb_iter % args.eval_iter == 0:
+        prev_best_fid_local = best_fid
+        # Visualization directory for evaluation
+        eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
+        os.makedirs(eval_vis_dir, exist_ok=True)
+        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_roll(
+            val_loader,
+            net,
+            diffusion,
+            logger,
+            evaluator,
+            device=comp_device,
+            unit_length=args.unit_length,
+            prev_best_fid=best_fid,
+            prev_best_div=best_div,
+            prev_best_rprecision_pred=[best_top1, best_top2, best_top3],
+            prev_best_matching_score_pred=best_matching,
+            draw=args.vis_eval,
+            vis_dir=eval_vis_dir,
+        )
+        # Save best FID checkpoint if improved
+        if best_fid < prev_best_fid_local:
+            save_dict = {
+                'diffusion': diffusion.state_dict(),
+                'iter': nb_iter,
+                'best_fid': best_fid,
+                'best_top1': best_top1,
+                'best_top2': best_top2,
+                'best_top3': best_top3,
+                'best_matching': best_matching,
+            }
+            if 'scheduler' in locals():
+                try:
+                    save_dict['scheduler'] = scheduler.state_dict()
+                except Exception:
+                    pass
+            if 'optimizer' in locals():
+                try:
+                    save_dict['optimizer'] = optimizer.state_dict()
+                except Exception:
+                    pass
+            torch.save(save_dict, os.path.join(args.out_dir, 'best_fid.pth'))
         # save 
-        torch.save({
-            'trans': trans_encoder.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'optimizer': optimizer.state_dict()
-        }, os.path.join(args.out_dir, f'latest.pth'))
+        latest_save = {
+            'diffusion': diffusion.state_dict(),
+            'iter': nb_iter,
+            'best_fid': best_fid,
+            'best_top1': best_top1,
+            'best_top2': best_top2,
+            'best_top3': best_top3,
+            'best_matching': best_matching,
+        }
+        if 'scheduler' in locals():
+            try:
+                latest_save['scheduler'] = scheduler.state_dict()
+            except Exception:
+                pass
+        if 'optimizer' in locals():
+            try:
+                latest_save['optimizer'] = optimizer.state_dict()
+            except Exception:
+                pass
+        torch.save(latest_save, os.path.join(args.out_dir, 'latest.pth'))
 
                     
 

@@ -73,7 +73,7 @@ def get_args_parser():
 
     parser.add_argument('--text', type=str, default='A man is jogging around.')
     parser.add_argument('--mode', type=str, default='rot', choices=['pos', 'rot'], help='recover mode, pos: position, rot: rotation')
-
+    parser.add_argument('--vis-eval', type=bool, default=True, help='visualize evaluation')
 
 
     return parser.parse_args()
