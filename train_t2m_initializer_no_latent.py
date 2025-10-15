@@ -97,7 +97,7 @@ args.latent_dir = os.path.join(f"./data/{'humanml3d_272' if args.dataname == 't2
 args.latent_dim = 272
 
 ##### ---- Dataloader ---- #####
-train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, split='train', num_workers=args.num_workers)
+train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, split='train', num_workers=args.num_workers, normalize=True)
 train_loader_iter = cycle(train_loader)
 # val_loader = DATALoader(args.dataname, 32, args.latent_dir, unit_length=args.unit_length, split='val')
 val_loader = dataset_eval_t2m.DATALoader(args.dataname, True, 32, unit_length=args.unit_length, num_workers=args.num_workers)
