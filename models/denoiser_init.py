@@ -558,12 +558,10 @@ class DenoiserInit(nn.Module):
         # text_timing = self.time_enc(text_timing.to(torch.float32))
 
         # Project text condition if needed
-        cond_proj = None
-        if condition is not None:
-            if self.text_proj is not None:
-                cond_proj = self.text_proj(condition)
-            else:
-                cond_proj = self.pos_enc(cond_proj)
+        if self.text_proj is not None:
+            cond_proj = self.text_proj(condition)
+        else:
+            cond_proj = self.pos_enc(cond_proj)
 
         # Blocks
         for block in self.blocks:
