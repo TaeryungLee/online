@@ -30,6 +30,7 @@ class Text2MotionDataset(data.Dataset):
             self.data_root = './data/humanml3d_272'
             self.text_enc_root = './data/text_enc/humanml3d_272/texts'
             self.text_dir = pjoin(self.data_root, 'texts')
+            self.meta_dir = './data/humanml3d_272/mean_std'
             self.joints_num = 22
             fps = 30
             self.max_motion_length = 78 * 4 // unit_length
