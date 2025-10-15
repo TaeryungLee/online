@@ -278,6 +278,8 @@ class DenoiserRoll(nn.Module):
                 cond_proj = self.text_proj(condition)
             else:
                 cond_proj = condition
+            # Positional encoding for condition sequence
+            cond_proj = self.pos_enc(cond_proj)
 
         # Blocks
         for block in self.blocks:
