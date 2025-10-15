@@ -559,9 +559,9 @@ class DenoiserInit(nn.Module):
 
         # Project text condition if needed
         if self.text_proj is not None:
-            cond_proj = self.text_proj(condition)
+            cond_proj = self.pos_enc(self.text_proj(condition))
         else:
-            cond_proj = self.pos_enc(cond_proj)
+            cond_proj = self.pos_enc(condition)
 
         # Blocks
         for block in self.blocks:
