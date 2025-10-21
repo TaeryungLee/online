@@ -9,7 +9,9 @@ from models.denoiser_roll import DenoiserRoll
 # Ramp & EDM sigma utilities
 # =========================
 
-def erdm_ramp(t, w, W: int, k: int):
+
+
+def _erdm_ramp(t, w, W: int, k: int):
     """
     ERDM ramp: r = 1 - ((w - t(k+1) - k) / (W - 2k - 1))
     - t: [B,1] in [0,1] (continuous) or [B] (자동 확장)
@@ -25,6 +27,11 @@ def erdm_ramp(t, w, W: int, k: int):
     denom = max(W - 2*k - 1, 1e-6)
     r = 1 - ((w - t*(k + 1) - k) / denom)          # [B,W]
     return r.clamp_(0.0, 1.0)
+
+def erdm_ramp(t, w, W: int, k: int):
+    zero_ramp = _erdm_ramp(torch.zeros_like(t), w, W, k)
+    one_ramp = _erdm_ramp(torch.ones_like(t), w, W, k)
+    return zero_ramp + (one_ramp - zero_ramp) * t[:, None]
 
 
 def edm_sigma_from_ramp(ramp, sigma_min=0.002, sigma_max=80.0, rho=7.0):
@@ -208,28 +215,28 @@ class DiffusionRoll(nn.Module):
         # w 인덱스(프레임별 σ 계산용)
         w = torch.arange(self.W, device=device, dtype=torch.float32)[None, :]  # [1,W]
 
+        # ---- 1) 현재 윈도우에서 Heun ODE로 다음 clean 윈도우 생성 ----
+        # i=0의 frame-wise σ
+        t0 = torch.zeros(B, device=device)
+        ramp0 = erdm_ramp(t0, w, self.W, self.k)                               # [B,W]
+        sigma0 = edm_sigma_from_ramp(ramp0, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
+        sigma0_map = make_sigma_map(sigma0, cur_x0.shape, self.time_dim)       # [B,1,...,W,...,1]
+
+        eps0 = torch.randn_like(cur_x0)
+        x = cur_x0 + (sigma0_map * eps0)
+
+        null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)
+        len_uncond = torch.ones(B, device=device, dtype=torch.long)
+
+        cond_cat = torch.cat([condition, null_ctx], dim=0)
+        condlen_cat = torch.cat([condition_len, len_uncond], dim=0)
         while produced < total_frames:
-            # ---- 1) 현재 윈도우에서 Heun ODE로 다음 clean 윈도우 생성 ----
-            # i=0의 frame-wise σ
-            t0 = torch.zeros(B, device=device)
-            ramp0 = erdm_ramp(t0, w, self.W, self.k)                               # [B,W]
-            sigma0 = edm_sigma_from_ramp(ramp0, self.sigma_min, self.sigma_max, self.rho)  # [B,W]
-            sigma0_map = make_sigma_map(sigma0, cur_x0.shape, self.time_dim)       # [B,1,...,W,...,1]
-
-            eps0 = torch.randn_like(cur_x0)
-            x = cur_x0 + (sigma0_map * eps0)
-
-            null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)
-            len_uncond = torch.ones(B, device=device, dtype=torch.long)
-
-            cond_cat = torch.cat([condition, null_ctx], dim=0)
-            condlen_cat = torch.cat([condition_len, len_uncond], dim=0)
             # text_timing_cat = torch.cat([text_timing, text_timing], dim=0)
 
             # Heun 적분
-            for i in range(N - 1):
-                t_i   = torch.full((B,), i / (N - 1),     device=device)
-                t_nxt = torch.full((B,), (i + 1) / (N - 1), device=device)
+            for i in range(N):
+                t_i   = torch.full((B,), i / (N),     device=device)
+                t_nxt = torch.full((B,), (i + 1) / (N), device=device)
 
                 ramp_i   = erdm_ramp(t_i,   w, self.W, self.k)                 # [B,W]
                 ramp_nxt = erdm_ramp(t_nxt, w, self.W, self.k)                 # [B,W]
@@ -241,6 +248,7 @@ class DiffusionRoll(nn.Module):
                 sb_n = make_sigma_map(sigma_nxt, cur_x0.shape, self.time_dim)
 
                 dt = sb_n - sb
+                breakpoint()
 
                 # Euler
                 x_cat = torch.cat([x, x], dim=0)
@@ -281,8 +289,8 @@ class DiffusionRoll(nn.Module):
             # ---- 3) 윈도우 슬라이드: 앞 hop을 버리고, 뒤에 노이즈 hop 프레임 붙이기 ----
             # prefix: next_x0[:, :, hop:, ...]  (길이 W - hop)
 
-            prefix = next_x0.narrow(self.time_dim, hop, self.W - hop)
-            prefix = x[:, hop:]
+            # prefix = next_x0.narrow(self.time_dim, hop, self.W - hop)
+            prefix = next_x0[:, hop:]
             # tail noise clean (B, hop, C, ...)
             tail_shape = list(x.shape)
             tail_shape[self.time_dim] = hop

@@ -124,7 +124,8 @@ net.to(comp_device)
 diffusion = DiffusionRoll(args)
 
 if args.resume is not None:
-    print('loading transformer checkpoint from {}'.format(args.resume))
+    print('loading diffusion checkpoint from {}'.format(args.resume))
+    args.resume = os.path.join(args.out_dir, args.resume)
     ckpt = torch.load(args.resume, map_location='cpu')
     new_ckpt_diffusion = {}
     for key in ckpt['diffusion'].keys():
@@ -242,7 +243,7 @@ while nb_iter <= args.total_iter:
         eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
         os.makedirs(eval_vis_dir, exist_ok=True)
 
-        for k in range(5):
+        for k in range(0):
             pred_pose = net.forward_decoder(pred_xstart[k:k+1])
             gt_pose = net.forward_decoder(m_tokens[k:k+1])
 
@@ -252,7 +253,7 @@ while nb_iter <= args.total_iter:
             
             visualize_smpl_85(recover_from_local_rotation(gt_denorm.squeeze(0), 22), smpl_model, title='', output_path=eval_vis_dir, name=f'train_gt_{k}')
             visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), 22), smpl_model, title='', output_path=eval_vis_dir, name=f'train_pred_{k}')
-        breakpoint()
+
         best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_roll(
             val_loader,
             net,
