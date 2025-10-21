@@ -5,8 +5,9 @@ import torch
 import random
 from torch.utils.tensorboard import SummaryWriter
 import json
-from smplx import SMPL
+ 
 
+from models.llama_model import LLaMAHF, LLaMAHFConfig
 from dataloader.dataset_TM_train_roll import DATALoader, cycle
 from dataloader import dataset_eval_t2m_roll as dataset_eval_t2m
 import options.option_transformer as option_trans
@@ -21,14 +22,10 @@ from transformers import AutoTokenizer, AutoModel
 from Evaluator_272.mld.models.architectures.temos.textencoder.distillbert_actor import DistilbertActorAgnosticEncoder
 from Evaluator_272.mld.models.architectures.temos.motionencoder.actor import ActorAgnosticEncoder
 from collections import OrderedDict
-from utils.eval_trans import evaluation_transformer_272_single, evaluation_transformer_272_roll
+from utils.eval_trans import evaluation_transformer_272_single, evaluation_transformer_272_roll, evaluation_transformer_272_roll_no_latent
 from Evaluator_272 import mld
 import sys
 import importlib
-from utils.recover_visualize import recover_from_local_rotation
-from utils.recover_visualize import visualize_smpl_85
-
-
 if 'mld' not in sys.modules:
     try:
         sys.modules['mld'] = importlib.import_module('Evaluator_272.mld')
@@ -95,31 +92,34 @@ logger = utils_model.get_logger(args.out_dir)
 writer = SummaryWriter(args.out_dir)
 logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
+##### ---- Without latent ---- #####
+args.latent_dir = os.path.join(f"./data/{'humanml3d_272' if args.dataname == 't2m_272' else 'babel_272'}/motion_data")
+args.latent_dim = 272
 
 
+##### ---- Dataloader ---- #####
+train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, window_size=args.window_size, normalize=True)
+train_loader_iter = cycle(train_loader)
+
+val_loader = dataset_eval_t2m.DATALoader(args.dataname, True, 32, unit_length=args.unit_length, num_workers=args.num_workers)
+val_loader_iter = cycle(val_loader)
 
 
-##### ---- Latent Model ---- #####
-clip_range = [-6, 6]
-net = LatentSpaceVAE(
-    cfg=args,
-    hidden_size=args.hidden_size,
-    depth=args.depth,
-    attn_window=args.attn_window,
-    n_heads=args.n_heads,
-    activation=args.activation,
-    norm=args.norm,
-    latent_dim=args.latent_dim,
-    clip_range=clip_range
-)
+# ##### ---- Latent Model ---- #####
+# clip_range = [-6, 6]
+# net = LatentSpaceVAE(
+#     cfg=args,
+#     hidden_size=args.hidden_size,
+#     depth=args.depth,
+#     attn_window=args.attn_window,
+#     n_heads=args.n_heads,
+#     activation=args.activation,
+#     norm=args.norm,
+#     latent_dim=args.latent_dim,
+#     clip_range=clip_range
+# )
+# net = net.to(comp_device)
 
-dataname = "humanml3d" if args.dataname == "t2m_272" else "babel"
-args.latent_model_pth = f"./checkpoints/latent/{dataname}/net_best_mpjpe.pth"
-print('loading latent model checkpoint from {}'.format(args.latent_model_pth))
-ckpt = torch.load(args.latent_model_pth, map_location='cpu')
-net.load_state_dict(ckpt['net'], strict=True)
-net.eval()
-net.to(comp_device)
 
 diffusion = DiffusionRoll(args)
 
@@ -136,18 +136,6 @@ if args.resume is not None:
     diffusion.load_state_dict(new_ckpt_diffusion, strict=True)
 diffusion.train()
 diffusion.to(comp_device)
-
-
-##### ---- Dataloader ---- #####
-args.latent_dir = os.path.join(f"./data/{'humanml3d_272' if args.dataname == 't2m_272' else 'babel_272'}/motion_data")
-args.latent_dim = 272
-train_loader = DATALoader(args.dataname, args.batch_size, args.latent_dir, unit_length=args.unit_length, window_size=args.window_size, normalize=True)
-train_loader_iter = cycle(train_loader)
-
-val_loader = dataset_eval_t2m.DATALoader(args.dataname, True, 32, unit_length=args.unit_length, num_workers=args.num_workers)
-val_loader_iter = cycle(val_loader)
-
-
 
 
 ##### ---- Optimizer & Scheduler ---- #####
@@ -204,16 +192,12 @@ best_div = 0.0
 best_top1, best_top2, best_top3 = 0.0, 0.0, 0.0
 best_matching = float('inf')
 
-smpl_model = SMPL(model_path='./human_models/smpl')
 
 while nb_iter <= args.total_iter:
     batch = next(train_loader_iter)
-    text, gt_motion, m_tokens_len, caption_enc, caption_enc_len, idxs = batch
+    text, m_tokens, m_tokens_len, caption_enc, caption_enc_len, idxs = batch
     text = list(text)
-    gt_motion, m_tokens_len, caption_enc, caption_enc_len, idxs = gt_motion.to(comp_device).to(torch.float32), m_tokens_len.to(comp_device), caption_enc.to(comp_device), caption_enc_len.to(comp_device), idxs.to(comp_device)
-
-    with torch.no_grad():
-        m_tokens = net.encode(gt_motion)
+    m_tokens, m_tokens_len, caption_enc, caption_enc_len, idxs = m_tokens.to(comp_device), m_tokens_len.to(comp_device), caption_enc.to(comp_device), caption_enc_len.to(comp_device), idxs.to(comp_device)
 
 
     loss, pred_xstart = diffusion(m_tokens, caption_enc, caption_enc_len, idxs)
@@ -241,19 +225,7 @@ while nb_iter <= args.total_iter:
         # Visualization directory for evaluation
         eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
         os.makedirs(eval_vis_dir, exist_ok=True)
-
-        for k in range(5):
-            pred_pose = net.forward_decoder(pred_xstart[k:k+1])
-            gt_pose = net.forward_decoder(m_tokens[k:k+1])
-
-            length_k = int(m_tokens_len[k].item())*args.unit_length if torch.is_tensor(m_tokens_len) else int(m_tokens_len[k])*args.unit_length
-            gt_denorm = val_loader.dataset.inv_transform(gt_pose.detach().cpu().numpy())
-            pred_denorm = val_loader.dataset.inv_transform(pred_pose.detach().cpu().numpy())
-            
-            visualize_smpl_85(recover_from_local_rotation(gt_denorm.squeeze(0), 22), smpl_model, title='', output_path=eval_vis_dir, name=f'train_gt_{k}')
-            visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), 22), smpl_model, title='', output_path=eval_vis_dir, name=f'train_pred_{k}')
-        breakpoint()
-        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_roll(
+        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_roll_no_latent(
             val_loader,
             net,
             diffusion,

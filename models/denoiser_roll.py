@@ -263,7 +263,6 @@ class DenoiserRoll(nn.Module):
         # Positional encoding
         x = self.pos_enc(x)
         # Condition encoding
-
         sigma_enc = self.sigma_enc(c_noise.reshape(B*T)).reshape(B, T, -1)
 
 

@@ -40,7 +40,7 @@ def get_args_parser():
     parser.add_argument('--weight-decay', default=1e-6, type=float, help='weight decay') 
     parser.add_argument('--optimizer',default='adamw', type=str, choices=['adam', 'adamw'], help='optimizer')
 
-    parser.add_argument('--num_timesteps', type=int, default=32, help='number of timesteps')
+    parser.add_argument('--num_timesteps', type=int, default=10, help='number of timesteps')
     parser.add_argument('--sigma_data', type=float, default=0.5, help='sigma data')
     parser.add_argument('--sigma_min', type=float, default=0.002, help='sigma min')
     parser.add_argument('--sigma_max', type=float, default=80.0, help='sigma max')

@@ -16,7 +16,7 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, max_text_len=32):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, max_text_len=32, normalize=False):
         
         self.max_length = 64
         self.window_size = window_size
@@ -24,7 +24,8 @@ class Text2MotionDataset(data.Dataset):
         self.dataset_name = dataset_name
         self.unit_length = unit_length
         self.max_text_len = max_text_len
-
+        self.normalize = normalize
+        
         if dataset_name == 't2m_272':
             self.data_root = './data/humanml3d_272'
             self.text_dir = pjoin(self.data_root, 'texts')
@@ -34,10 +35,15 @@ class Text2MotionDataset(data.Dataset):
             self.max_motion_length = 78 * 4 // unit_length
             dim_pose = 272
             split_file = pjoin(self.data_root, 'split', 'train.txt')
+            self.meta_dir = './data/humanml3d_272/mean_std'
 
         else:
             raise ValueError(f"Dataset {dataset_name} not supported")
-     
+
+        if normalize:
+            self.mean = np.load(pjoin(self.meta_dir, 'Mean.npy')) 
+            self.std = np.load(pjoin(self.meta_dir, 'Std.npy'))
+        
         id_list = []
         with cs.open(split_file, 'r') as f:
             for line in f.readlines():
@@ -157,18 +163,24 @@ class Text2MotionDataset(data.Dataset):
         else:
             caption_enc_len = 0
 
+        if self.normalize:
+            m_tokens = (m_tokens - self.mean) / self.std
+
+        else:
+            m_tokens = m_tokens
+
         return caption, m_tokens, m_tokens_len, caption_enc, caption_enc_len, idx
 
 
 
 
 def DATALoader(dataset_name,
-                batch_size, latent_dir, 
+                batch_size, latent_dir, normalize=False,
                 unit_length=4,
                 window_size=64,
                 num_workers = 8) : 
 
-    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size),
+    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size, normalize=normalize),
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
