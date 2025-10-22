@@ -248,7 +248,6 @@ class DiffusionRoll(nn.Module):
                 sb_n = make_sigma_map(sigma_nxt, cur_x0.shape, self.time_dim)
 
                 dt = sb_n - sb
-                breakpoint()
 
                 # Euler
                 x_cat = torch.cat([x, x], dim=0)
