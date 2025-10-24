@@ -271,7 +271,125 @@ def evaluation_tae_multi(out_dir, vis_dir, val_loader, net, logger, writer, nb_i
 
 # Multi-GPU evaluation of Causal TAE (training time)
 @torch.no_grad()        
-def evaluation_motionprimitive_multi(out_dir, vis_dir, val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, draw = False, save = True, savegif = True, device=torch.device('cuda'), accelerator=None, evaluator=None): 
+def evaluation_motionprimitive_multi(out_dir, vis_dir, val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, draw = True, save = True, savegif = True, device=torch.device('cuda'), accelerator=None, evaluator=None): 
+    net.eval()
+    nb_sample = 0
+    
+    draw_orig = []
+    draw_pred = []
+    draw_text = []
+    smpl_orig = []
+    smpl_pred = []
+
+    nb_sample = torch.tensor(0, device=device)
+    mpjpe = torch.tensor(0.0, device=device)
+    num_poses = torch.tensor(0, device=device)
+
+    # Optional: collect motion embeddings for FID when evaluator (textencoder, motionencoder) is provided
+    motion_annotation_list = []
+    motion_pred_list = []
+    motionencoder = None
+    if evaluator is not None:
+        # evaluator expected as (textencoder, motionencoder) or (None, motionencoder)
+        try:
+            _, motionencoder = evaluator
+        except Exception:
+            motionencoder = evaluator  # allow passing just motionencoder
+
+    if draw:
+        smpl_model = SMPL(model_path='./human_models/smpl')
+
+    for batch in val_loader:
+        motion, m_length = batch
+        motion = motion.to(device).to(torch.float32)
+        bs, seq = motion.shape[0], motion.shape[1]
+        num_joints = 22
+
+        pred_pose_eval = torch.zeros((bs, seq, motion.shape[-1])).to(device)
+        pred_pose = net.forward_long(motion)
+
+        for i in range(bs):
+            pose = val_loader.dataset.inv_transform(motion[i:i+1, :m_length[i], :].detach().cpu().numpy())
+            pose_xyz = recover_from_local_position(pose.squeeze(0), num_joints)
+
+            pred_pose_eval[i:i+1,:m_length[i],:] = pred_pose[i:i+1, :m_length[i]]
+
+            if accelerator is None or accelerator.is_main_process:
+                pred_denorm = val_loader.dataset.inv_transform(pred_pose_eval[i:i+1, :m_length[i]].detach().cpu().numpy())
+                pred_xyz = recover_from_local_position(pred_denorm.squeeze(0), num_joints)
+                pred_xyz = torch.from_numpy(pred_xyz).float().to(device)
+                pose_xyz = torch.from_numpy(pose_xyz).float().to(device)
+                mpjpe += torch.sum(calculate_mpjpe(pose_xyz[:, :m_length[i]].squeeze(), pred_xyz[:, :m_length[i]].squeeze()))
+                num_poses += pose_xyz.shape[0]
+
+                if draw and i < 3:
+                    visualize_smpl_85(recover_from_local_rotation(pose.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'gt_{i}')
+                    visualize_smpl_85(recover_from_local_rotation(pred_denorm.squeeze(0), num_joints), smpl_model, title='', output_path=vis_dir, name=f'pred_{i}')
+                else:
+                    draw = False
+
+        # Collect motion embeddings for FID on main process only
+        if motionencoder is not None and (accelerator is None or accelerator.is_main_process):
+            em = motionencoder(motion, m_length).loc
+            em_pred = motionencoder(pred_pose_eval, m_length).loc
+            motion_annotation_list.append(em)
+            motion_pred_list.append(em_pred)
+                    
+        nb_sample += bs
+
+
+    if accelerator is not None:
+        accelerator.wait_for_everyone()
+        nb_sample = accelerator.reduce(nb_sample, reduction="sum")
+        mpjpe = accelerator.reduce(mpjpe, reduction="sum")
+        
+    if accelerator is None or accelerator.is_main_process:
+        mpjpe = mpjpe / num_poses    
+        # transform mpjpe to mm
+        mpjpe = mpjpe * 1000
+        # Compute FID if possible
+        fid_msg = ""
+        if len(motion_annotation_list) > 0 and len(motion_pred_list) > 0:
+            motion_annotation_np = torch.cat(motion_annotation_list, dim=0).cpu().numpy()
+            motion_pred_np = torch.cat(motion_pred_list, dim=0).cpu().numpy()
+            gt_mu, gt_cov  = calculate_activation_statistics(motion_annotation_np)
+            mu, cov = calculate_activation_statistics(motion_pred_np)
+            fid = calculate_frechet_distance(gt_mu, gt_cov, mu, cov)
+            fid_msg = f", FID. {fid:.4f}"
+        msg = f"--> \t Eva. Iter {nb_iter} :, mpjpe. {mpjpe:.3f} (mm){fid_msg}"
+        logger.info(msg)
+    
+    # save visualization on tensorboard
+    # if draw and (accelerator is None or accelerator.is_main_process):
+    #     writer.add_scalar('./Test/mpjpe', mpjpe, nb_iter)
+
+    #     if nb_iter % 20000 == 0 : 
+    #         for ii in range(4):
+    #             draw_orig[ii] = draw_orig[ii].unsqueeze(0)
+    #             tensorborad_add_video_xyz(writer, draw_orig[ii], nb_iter, tag='./Vis/orig_eval'+str(ii), title_batch=[draw_text[ii]], outname=[os.path.join(out_dir, 'gt'+str(ii)+'.gif')] if savegif else None, fps=30)
+            
+    #     if nb_iter % 20000 == 0 : 
+    #         for ii in range(4):
+    #             draw_pred[ii] = draw_pred[ii].unsqueeze(0)
+    #             tensorborad_add_video_xyz(writer, draw_pred[ii], nb_iter, tag='./Vis/pred_eval'+str(ii), title_batch=[draw_text[ii]], outname=[os.path.join(out_dir, 'pred'+str(ii)+'.gif')] if savegif else None, fps=30)   
+
+    if accelerator is None or accelerator.is_main_process:
+        if mpjpe < best_mpjpe :
+            msg = f"--> --> \t mpjpe Improved from {best_mpjpe:.5f} to {mpjpe:.5f} !!!"
+            logger.info(msg)
+            best_mpjpe = mpjpe
+            if save:
+                torch.save({'net' : net.state_dict()}, os.path.join(out_dir, 'net_best_mpjpe.pth'))
+        if save:
+            torch.save({'net' : net.state_dict()}, os.path.join(out_dir, 'net_last.pth'))
+
+    net.train()
+    return best_iter, best_mpjpe, writer, logger
+
+
+# Multi-GPU evaluation of Causal TAE (training time)
+@torch.no_grad()        
+def evaluation_cvae_multi(out_dir, vis_dir, val_loader, net, logger, writer, nb_iter, best_iter, best_mpjpe, draw = True, save = True, savegif = True, device=torch.device('cuda'), accelerator=None, evaluator=None): 
     net.eval()
     nb_sample = 0
     
