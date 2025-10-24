@@ -2,15 +2,19 @@ from models.DART.model.mld_vae import AutoMldVae
 import torch
 from torch import nn
 
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import logger,rotate_half,Cache,BaseModelOutputWithPast,DynamicCache,repeat_kv,_flash_attention_forward
-
-
 
 # wrapper for mld_vae
 class MotionPrimitive(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.vae = AutoMldVae(nfeats, latent_dim, h_dim, ff_size, num_layers, num_heads, dropout, arch, normalize_before, activation, position_embedding)
+        self.cfg = cfg
+        self.vae = AutoMldVae(cfg.dim_pose,
+            cfg.latent_dim,
+            cfg.hidden_size,
+            cfg.width,
+            cfg.depth,
+            cfg.n_heads,
+        )
 
         self.history = 2
         self.future = 8
@@ -20,7 +24,7 @@ class MotionPrimitive(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def encode(self, x):
+    def encode_long(self, x):
         """
         Encode the input motion sequence into series of latent vectors (Inference 용도)
         Args:
@@ -36,7 +40,7 @@ class MotionPrimitive(nn.Module):
                 future_motion = x[:, i * self.future: i * self.future + self.future]
                 history_motion = x[:, self.future + i*self.history: self.future + (i+1)*self.history]
                 latent, dist = self.vae.encode(future_motion, history_motion)
-                primitives.append(latent.detach().cpu())
+                primitives.append(latent)
 
         return torch.stack(primitives, dim=1)
 
@@ -51,7 +55,6 @@ class MotionPrimitive(nn.Module):
             mu: (B, T, D_latent) - mean of the latent distribution
             logvar: (B, T, D_latent) - log variance of the latent distribution
         """
-
         assert x.shape[1] == self.history + self.future
         
         # Encode
@@ -64,19 +67,39 @@ class MotionPrimitive(nn.Module):
         return x_out, mu, logvar
 
 
-    def forward_decoder(self, x):
-        x_out = self.decoder(x)
+    def forward_decoder(self, z, history_motion):
+        """
+            Forward pass for decoding
+            Args:
+                z: (B, T_latent, D_latent) - input latent vectors
+                history_motion: (B, H, D) - input history motion sequence
+            Returns:
+                x_out: (B, T = T_latent*F + H, D) - output motion sequence
+        """
+        x_out = self.vae.decode(z, history_motion, self.future)
         return x_out
 
 
+    def forward_long(self, x):
+        primitives = self.encode_long(x)
+        x_out = self.decode_long(primitives, x[:, :self.history])
+        # pad zeros at the end if decoded sequence is shorter than input along time dimension
+        if x_out.shape[1] < x.shape[1]:
+            pad_len = x.shape[1] - x_out.shape[1]
+            pad = torch.zeros(x_out.shape[0], pad_len, x_out.shape[2], device=x_out.device, dtype=x_out.dtype)
+            x_out = torch.cat([x_out, pad], dim=1)
 
-    def encode(
-            self,
-            future_motion, history_motion,
-            scale_latent: bool = False,
-    ) -> Union[Tensor, Distribution]:
-        return
-    def decode(self, z: Tensor, history_motion, nfuture,
-            scale_latent: bool = False,
-            ):
-        return
+        return x_out
+
+
+    def decode_long(self, z, initial_history_motion):
+        num_primitive = z.shape[1]
+        x_out = [initial_history_motion]
+        with torch.no_grad():
+            for i in range(num_primitive):
+                latent = z[:, i]
+                history_motion = x_out[-1]
+                future_motion = self.vae.decode(latent, history_motion, self.future)
+                x_out.append(future_motion)
+
+        return torch.cat(x_out, dim=1)

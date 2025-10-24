@@ -10,6 +10,7 @@ def get_args_parser():
     parser.add_argument('--batch-size', default=128, type=int, help='batch size')
     parser.add_argument('--window-size', type=int, default=64, help='training motion length')
     parser.add_argument('--unit-length', type=int, default=1, help='unit length')
+    parser.add_argument('--dim_pose', type=int, default=272, help='number of features')
     ## optimization
     parser.add_argument('--total-iter', default=2000000, type=int, help='number of total iterations to run')
     parser.add_argument('--warm-up-iter', default=1000, type=int, help='number of total iterations for warmup')
@@ -31,6 +32,10 @@ def get_args_parser():
     parser.add_argument("--dilation-growth-rate", type=int, default=3, help="dilation growth rate")
     parser.add_argument("--width", type=int, default=1024, help="width")
     parser.add_argument("--encoder", type=str, default='mlp', help="encoder")
+
+    # motion primitive
+    parser.add_argument("--history", type=int, default=2, help="history length")
+    parser.add_argument("--future", type=int, default=8, help="future length")
 
 
     ## resume

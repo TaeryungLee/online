@@ -131,3 +131,16 @@ CUDA_VISIBLE_DEVICES=3 python train_t2m_diffusion.py --num_workers 50 --dataname
 
 CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl4_t1 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 4 --num_timesteps 1
 CUDA_VISIBLE_DEVICES=1 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl8_t8 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 8 --num_timesteps 8
+
+
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl1_t1 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 1 --num_timesteps 1 --resume best_fid.pth --eval-iter 1
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl2_t2 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 2 --num_timesteps 2 --resume best_fid.pth --eval-iter 1
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl4_t4 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 4 --num_timesteps 4 --resume best_fid.pth --eval-iter 1
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl4_t4 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 4 --num_timesteps 4 --resume best_fid.pth --eval-iter 1
+
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl4_t1 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 4 --num_timesteps 1 --resume best_fid.pth --eval-iter 1
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname t2m_272 --exp-name denoiser06_roll_ln12_ovl8_t8 --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 8 --num_timesteps 8 --resume best_fid.pth --eval-iter 1
+
+
+
+python train_motionprimitive.py --dataname t2m_272 --exp-name motionprimitive_dim512_nl9_dim512 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --window-size 10
