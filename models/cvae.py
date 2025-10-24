@@ -37,6 +37,7 @@ class CVAE(nn.Module):
                  normalize_before: bool = False,
                  activation: str = "gelu",
                  position_embedding: str = "learned",
+                 nfuture: int = 8,
                  **kwargs) -> None:
 
         super().__init__()
@@ -49,7 +50,7 @@ class CVAE(nn.Module):
         self.arch = arch
         self.mlp_dist = False
         self.pe_type = "mld"
-        self.nfuture = 8
+        self.nfuture = nfuture
 
         self.query_pos_encoder = build_position_encoding(
             self.h_dim, position_embedding=position_embedding)
@@ -256,10 +257,11 @@ class CVAEWrapper(nn.Module):
             cfg.width,
             cfg.depth,
             cfg.n_heads,
+            nfuture=cfg.future,
         )
 
-        self.history = 2
-        self.future = 8
+        self.history = cfg.history
+        self.future = cfg.future
 
 
     def forward(self, x):
