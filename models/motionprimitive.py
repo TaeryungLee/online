@@ -1,4 +1,4 @@
-from models.DART.model.mld_vae import AutoMldVae
+from models.dart.model.mld_vae import AutoMldVae
 import torch
 from torch import nn
 
