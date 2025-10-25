@@ -98,7 +98,7 @@ class MotionPrimitive(nn.Module):
         with torch.no_grad():
             for i in range(num_primitive):
                 latent = z[:, i]
-                history_motion = x_out[-1]
+                history_motion = x_out[-1][:, :self.history]
                 future_motion = self.vae.decode(latent, history_motion, self.future)
                 x_out.append(future_motion)
 
