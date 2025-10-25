@@ -209,7 +209,7 @@ class CVAE(nn.Module):
             - 1
         )
         # sum over latent slots and dims, mean over batch
-        kl_prior = kl_prior.sum(dim=-1).mean()
+        kl_prior = kl_prior.mean()
 
         z = self.reparameterize(mu, logvar)
         x_out = self.decode(z, self.nfuture)
