@@ -143,7 +143,7 @@ CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname
 
 
 
-python train_motionprimitive.py --dataname t2m_272 --exp-name motionprimitive_dim512_nl9_dim512 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --window-size 10
+python train_motionprimitive.py --dataname t2m_272 --exp-name motionprimitive_dim512_nl9_dim512 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
 
 
 CUDA_VISIBLE_DEVICES=0 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl9_dim512_f8_h2 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2

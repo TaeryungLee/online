@@ -46,7 +46,7 @@ class MotionPrimitive(nn.Module):
         return torch.stack(primitives, dim=1)
 
 
-    def forward(self, x):
+    def forward(self, future_motion, history_motion):
         """
         Forward pass for training
         Args:
@@ -56,14 +56,13 @@ class MotionPrimitive(nn.Module):
             mu: (B, T, D_latent) - mean of the latent distribution
             logvar: (B, T, D_latent) - log variance of the latent distribution
         """
-        assert x.shape[1] == self.history + self.future
         
         # Encode
-        mu, logvar = self.vae.encode(x[:, :self.history], x[:, self.history:])
+        mu, logvar = self.vae.encode(future_motion, history_motion)
         x_encoder = self.reparameterize(mu, logvar)
         
         # decoder
-        x_out = self.vae.decode(x_encoder, x[:, :self.history], self.future, scale_latent=True)
+        x_out = self.vae.decode(x_encoder, history_motion, self.future, scale_latent=True)
         return x_out, mu, logvar
 
 

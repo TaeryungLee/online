@@ -59,6 +59,7 @@ def get_args_parser():
     parser.add_argument('--root_loss', default=7.0, type=float, help='root loss')
     parser.add_argument('--kl_loss', default=1e-5, type=float, help='kl loss')
     parser.add_argument('--kl_prior_loss', default=1e-4, type=float, help='kl prior loss')
+    parser.add_argument('--seam_loss', default=1.0, type=float, help='seam loss')
     parser.add_argument('--latent_dim', default=128, type=int, help='latent dimension')
     parser.add_argument('--hidden_size', default=1024, type=int, help='hidden size')
     parser.add_argument('--nb_joints', default=22, type=int, help='number of joints')

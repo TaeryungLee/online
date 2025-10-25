@@ -26,7 +26,7 @@ def update_lr_warm_up(optimizer, nb_iter, warm_up_iter, lr):
 args = option_tae.get_args_parser()
 torch.manual_seed(args.seed)
 
-args.window_size = args.history + args.future
+args.window_size = args.history + (args.future * 3)
 
 args.out_dir = os.path.join(args.out_dir, f'{args.exp_name}')
 os.makedirs(args.out_dir, exist_ok = True)
@@ -90,46 +90,60 @@ train_loader_iter = dataset_tae.cycle(train_loader)
 Loss = losses.ReConsLoss(motion_dim=272)
 
 ##### ------ warm-up ------- #####
-avg_recons, avg_kl, avg_root = 0., 0., 0.
+avg_recons, avg_kl, avg_root, avg_seam = 0., 0., 0., 0.
 for nb_iter in range(1, args.warm_up_iter+1):
     
     optimizer, current_lr = update_lr_warm_up(optimizer, nb_iter, args.warm_up_iter, args.lr)
 
     gt_motion = next(train_loader_iter)
     gt_motion = gt_motion.to(comp_device).float()
+    history_motion_pred = None
 
-    if args.num_gpus > 1:
-        pred_motion, mu, logvar = net.module(gt_motion)
-    else:
-        pred_motion, mu, logvar = net(gt_motion)
-    
-    gt_motion = gt_motion[:, args.history:]
-    loss_motion = Loss(pred_motion, gt_motion)
-    loss_kl = Loss.forward_KL(mu, logvar)
-    loss_root = Loss.forward_root(pred_motion, gt_motion)
-    loss_vel = Loss.forward_vel_loss(pred_motion, gt_motion)
-    loss_acc = Loss.forward_acc_loss(pred_motion, gt_motion)
-    loss = loss_motion + loss_kl * args.kl_loss + args.root_loss * loss_root + args.vel_loss * loss_vel + args.acc_loss * loss_acc
+    # 세 번의 forward pass를 하도록 수정
+    for fwd_idx in range(3):
+        gt_motion_fwd = gt_motion[:, fwd_idx * args.future: (fwd_idx + 1) * args.future + args.history]
+        future_motion = gt_motion_fwd[:, args.future:]
+        if fwd_idx == 0:
+            history_motion = gt_motion_fwd[:, :args.history]
+        else:
+            history_motion = history_motion_pred
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+        pred_motion, mu, logvar = net(future_motion, history_motion)
+        
+        history_motion_pred = pred_motion[:, -args.history:].clone().detach()
+        loss_motion = Loss(pred_motion, gt_motion_fwd[:, args.history:])
+        
+        loss_kl = Loss.forward_KL(mu, logvar)
+        loss_root = Loss.forward_root(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_vel = Loss.forward_vel_loss(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_acc = Loss.forward_acc_loss(pred_motion, gt_motion_fwd[:, args.history:])
+        # loss seam
+        seam_vel = history_motion[:, -1] - pred_motion[:, 0]
+        seam_vel_gt = gt_motion_fwd[:, args.history-1] - gt_motion_fwd[:, args.history]
+        loss_seam = torch.mean(torch.abs(seam_vel - seam_vel_gt))
 
-    avg_recons += loss_motion.item()
-    avg_kl += loss_kl.item()
-    avg_root += loss_root.item()
-    
+        loss = loss_motion + loss_kl * args.kl_loss + args.root_loss * loss_root + args.vel_loss * loss_vel + args.acc_loss * loss_acc + args.seam_loss * loss_seam
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        avg_recons += loss_motion.item()
+        avg_kl += loss_kl.item()
+        avg_root += loss_root.item()
+        avg_seam += loss_seam.item()
+
     if nb_iter % args.print_iter ==  0 :
         avg_recons /= args.print_iter
         avg_kl /= args.print_iter
         avg_root /= args.print_iter
-
-        logger.info(f"Warmup. Iter {nb_iter} :  lr {current_lr:.5f} \t Recons.  {avg_recons:.5f} \t KL. {avg_kl:.5f} \t Root. {avg_root:.5f}")
+        avg_seam /= args.print_iter
+        logger.info(f"Warmup. Iter {nb_iter} :  lr {current_lr:.5f} \t Recons.  {avg_recons:.5f} \t KL. {avg_kl:.5f} \t Root. {avg_root:.5f} \t Seam. {avg_seam:.5f}")
         
-        avg_recons, avg_kl, avg_root = 0., 0., 0.
+        avg_recons, avg_kl, avg_root, avg_seam = 0., 0., 0., 0.
 
 ##### ---- Training ---- #####
-avg_recons, avg_kl, avg_root = 0., 0., 0.
+avg_recons, avg_kl, avg_root, avg_seam = 0., 0., 0., 0.
 
 
 
@@ -139,48 +153,60 @@ else:
     best_iter, best_mpjpe, writer, logger = eval_trans.evaluation_motionprimitive_multi(args.out_dir, os.path.join(args.out_dir, str(nb_iter)), val_loader, net, logger, writer, 0, best_iter=0, best_mpjpe=1000, device=comp_device)
 
 for nb_iter in range(1, args.total_iter + 1):
-    
     gt_motion = next(train_loader_iter)
-    gt_motion = gt_motion.to(comp_device).float() 
-    
-    if args.num_gpus > 1:
-        pred_motion, mu, logvar = net.module(gt_motion)
-    else:
-        pred_motion, mu, logvar = net(gt_motion)
+    gt_motion = gt_motion.to(comp_device).float()
+    history_motion_pred = None
 
-    gt_motion = gt_motion[:, args.history:]
-    loss_motion = Loss(pred_motion, gt_motion)
-    loss_kl = Loss.forward_KL(mu, logvar)
-    loss_root = Loss.forward_root(pred_motion, gt_motion)
-    loss_vel = Loss.forward_vel_loss(pred_motion, gt_motion)
-    loss_acc = Loss.forward_acc_loss(pred_motion, gt_motion)
+    # 세 번의 forward pass를 하도록 수정
+    for fwd_idx in range(3):
+        gt_motion_fwd = gt_motion[:, fwd_idx * args.future: (fwd_idx + 1) * args.future + args.history]
+        future_motion = gt_motion_fwd[:, args.future:]
+        if fwd_idx == 0:
+            history_motion = gt_motion_fwd[:, :args.history]
+        else:
+            history_motion = history_motion_pred
 
-    loss = loss_motion + loss_kl * args.kl_loss + args.root_loss * loss_root + args.vel_loss * loss_vel + args.acc_loss * loss_acc
-    
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    scheduler.step()
-    
-    try:
+        pred_motion, mu, logvar = net(future_motion, history_motion)
+        
+        history_motion_pred = pred_motion[:, -args.history:].clone().detach()
+        loss_motion = Loss(pred_motion, gt_motion_fwd[:, args.history:])
+        
+        loss_kl = Loss.forward_KL(mu, logvar)
+        loss_root = Loss.forward_root(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_vel = Loss.forward_vel_loss(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_acc = Loss.forward_acc_loss(pred_motion, gt_motion_fwd[:, args.history:])
+        # loss seam
+        seam_vel = history_motion[:, -1] - pred_motion[:, 0]
+        seam_vel_gt = gt_motion_fwd[:, args.history-1] - gt_motion_fwd[:, args.history]
+        loss_seam = torch.mean(torch.abs(seam_vel - seam_vel_gt))
+
+        loss = loss_motion + loss_kl * args.kl_loss + args.root_loss * loss_root + args.vel_loss * loss_vel + args.acc_loss * loss_acc + args.seam_loss * loss_seam
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
         avg_recons += loss_motion.item()
         avg_kl += loss_kl.item()
         avg_root += loss_root.item()
-    except:
-        continue
+        avg_seam += loss_seam.item()
+
+    scheduler.step()
     
     if nb_iter % args.print_iter ==  0 :
         avg_recons /= args.print_iter
         avg_kl /= args.print_iter
         avg_root /= args.print_iter
+        avg_seam /= args.print_iter
         writer.add_scalar('./Train/Recon_loss', avg_recons, nb_iter)
         writer.add_scalar('./Train/KL', avg_kl, nb_iter)
         writer.add_scalar('./Train/Root_loss', avg_root, nb_iter)
+        writer.add_scalar('./Train/Seam_loss', avg_seam, nb_iter)
         writer.add_scalar('./Train/LR', current_lr, nb_iter)
         
-        logger.info(f"Train. Iter {nb_iter} : \t Recons.  {avg_recons:.5f} \t KL. {avg_kl:.5f} \t Root. {avg_root:.5f}")
+        logger.info(f"Train. Iter {nb_iter} : \t Recons.  {avg_recons:.5f} \t KL. {avg_kl:.5f} \t Root. {avg_root:.5f} \t Seam. {avg_seam:.5f}")
         
-        avg_recons, avg_kl, avg_root = 0., 0., 0.
+        avg_recons, avg_kl, avg_root, avg_seam = 0., 0., 0., 0.
 
     if nb_iter % args.eval_iter==0:
         if args.num_gpus > 1:

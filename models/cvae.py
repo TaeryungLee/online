@@ -209,7 +209,7 @@ class CVAE(nn.Module):
             - 1
         )
         # sum over latent slots and dims, mean over batch
-        kl_prior = kl_prior.mean()
+        kl_prior = kl_prior.sum(dim=-1).mean()
 
         z = self.reparameterize(mu, logvar)
         x_out = self.decode(z, self.nfuture)
@@ -264,7 +264,7 @@ class CVAEWrapper(nn.Module):
         self.future = cfg.future
 
 
-    def forward(self, x):
+    def forward(self, future_motion, history_motion):
         """
         Forward pass for training
         Args:
@@ -274,9 +274,8 @@ class CVAEWrapper(nn.Module):
             mu: (B, T, D_latent) - mean of the latent distribution
             logvar: (B, T, D_latent) - log variance of the latent distribution
         """
-        assert x.shape[1] == self.history + self.future
 
-        return self.cvae.forward(x[:, :self.history], x[:, self.history:])
+        return self.cvae.forward(future_motion, history_motion)
 
 
     def forward_long(self, x):
