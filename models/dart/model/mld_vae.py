@@ -109,7 +109,7 @@ class AutoMldVae(nn.Module):
             self,
             future_motion, history_motion,
             scale_latent: bool = False,
-    ) -> Union[Tensor, Distribution]:
+    ):
         device = future_motion.device
         bs, nfuture, nfeats = future_motion.shape
         nhistory = history_motion.shape[1]
@@ -140,12 +140,12 @@ class AutoMldVae(nn.Module):
         #     pdb.set_trace()
 
         # resampling
-        std = logvar.exp().pow(0.5)
-        dist = torch.distributions.Normal(mu, std)
-        latent = dist.rsample()
-        if scale_latent:  # only used during denoiser training
-            latent = latent / self.latent_std
-        return latent, dist
+        # std = logvar.exp().pow(0.5)
+        # dist = torch.distributions.Normal(mu, std)
+        # latent = dist.rsample()
+        # if scale_latent:  # only used during denoiser training
+        #     latent = latent / self.latent_std
+        return mu, logvar
 
     def decode(self, z: Tensor, history_motion, nfuture,
                scale_latent: bool = False,

@@ -39,7 +39,8 @@ class MotionPrimitive(nn.Module):
             for i in range(num_primitive):
                 future_motion = x[:, i * self.future: i * self.future + self.future]
                 history_motion = x[:, self.future + i*self.history: self.future + (i+1)*self.history]
-                latent, dist = self.vae.encode(future_motion, history_motion)
+                mu, logvar = self.vae.encode(future_motion, history_motion)
+                latent = self.reparameterize(mu, logvar)
                 primitives.append(latent)
 
         return torch.stack(primitives, dim=1)
@@ -58,12 +59,11 @@ class MotionPrimitive(nn.Module):
         assert x.shape[1] == self.history + self.future
         
         # Encode
-        _, dist = self.vae.encode(x[:, :self.history], x[:, self.history:])
-        mu, logvar = dist.mean, dist.stddev
+        mu, logvar = self.vae.encode(x[:, :self.history], x[:, self.history:])
         x_encoder = self.reparameterize(mu, logvar)
         
         # decoder
-        x_out = self.vae.decode(x_encoder, x[:, :self.history], self.future)
+        x_out = self.vae.decode(x_encoder, x[:, :self.history], self.future, scale_latent=True)
         return x_out, mu, logvar
 
 
