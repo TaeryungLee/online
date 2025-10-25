@@ -114,8 +114,6 @@ class CVAE(nn.Module):
             torch.randn(self.latent_size * 2, self.h_dim))
 
         self.skel_embedding = nn.Linear(input_feats, self.h_dim)
-        self.skel_embedding_prior = nn.Linear(input_feats, self.h_dim)
-        self.skel_embedding_decoder = nn.Linear(input_feats, self.h_dim)
         self.final_layer = nn.Linear(self.h_dim, output_feats)
 
         self.register_buffer('latent_mean', torch.tensor(0))
@@ -176,7 +174,7 @@ class CVAE(nn.Module):
 
         x = future_motion
         # Embed each human poses into latent vectors
-        x = self.skel_embedding_prior(x)
+        x = self.skel_embedding(x)
 
         # Switch sequence and batch_size because the input of
         # Pytorch Transformer is [Sequence, Batch size, ...]
@@ -218,24 +216,24 @@ class CVAE(nn.Module):
 
         return x_out, mu_prior, logvar_prior, kl_prior
 
-    def decode(self, z, history_motion, nfuture, scale_latent = False):
+    def decode(self, z, nfuture, scale_latent = False):
         bs = z.shape[0]
         if scale_latent:  # only used during denoiser training
             z = z * self.latent_std
         z = self.decoder_latent_proj(z).transpose(1, 0)  # [latent_size, bs, latent_dim] => [latent_size, bs, h_dim]
         queries = torch.zeros(nfuture, bs, self.h_dim, device=z.device)
-        history_embedding = self.skel_embedding_decoder(history_motion).permute(1, 0, 2)  # [nhistory, bs, h_dim]
+
 
         # Pass through the transformer decoder
         # with the latent vector for memory
         if self.arch == "all_encoder":
-            xseq = torch.cat((z, history_embedding, queries), dim=0)
+            xseq = torch.cat((z, queries), dim=0)
             xseq = self.query_pos_decoder(xseq)
             output = self.decoder(
                 xseq)[-nfuture:]
 
         elif self.arch == "encoder_decoder":
-            xseq = torch.cat((z, history_embedding, queries), dim=0)
+            xseq = torch.cat((z, queries), dim=0)
             xseq = self.query_pos_decoder(xseq)
             output = self.decoder(
                 tgt=xseq,
@@ -266,7 +264,7 @@ class CVAEWrapper(nn.Module):
         self.future = cfg.future
 
 
-    def forward(self, future_motion, history_motion):
+    def forward(self, x):
         """
         Forward pass for training
         Args:
@@ -276,13 +274,14 @@ class CVAEWrapper(nn.Module):
             mu: (B, T, D_latent) - mean of the latent distribution
             logvar: (B, T, D_latent) - log variance of the latent distribution
         """
+        assert x.shape[1] == self.history + self.future
 
-        return self.cvae.forward(future_motion, history_motion)
+        return self.cvae.forward(x[:, :self.history], x[:, self.history:])
 
 
     def forward_long(self, x):
         primitives = self.encode_long(x)
-        x_out = self.decode_long(primitives, x[:, :self.history])
+        x_out = self.decode_long(primitives)
         # pad zeros at the end if decoded sequence is shorter than input along time dimension
         if x_out.shape[1] < x.shape[1]:
             pad_len = x.shape[1] - x_out.shape[1]
@@ -316,14 +315,13 @@ class CVAEWrapper(nn.Module):
 
 
 
-    def decode_long(self, z, history_motion):
+    def decode_long(self, z):
         num_primitive = z.shape[1]
-        x_out = [history_motion]
+        x_out = []
         with torch.no_grad():
             for i in range(num_primitive):
                 latent = z[:, i]
-                history_motion = x_out[-1][:, :self.history]
-                future_motion = self.cvae.decode(latent, history_motion, self.future)
+                future_motion = self.cvae.decode(latent, self.future)
                 x_out.append(future_motion)
 
         return torch.cat(x_out, dim=1)
