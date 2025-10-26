@@ -37,8 +37,8 @@ class MotionPrimitive(nn.Module):
         primitives = []
         with torch.no_grad():
             for i in range(num_primitive):
-                future_motion = x[:, i * self.future: i * self.future + self.future]
-                history_motion = x[:, self.future + i*self.history: self.future + (i+1)*self.history]
+                history_motion = x[:, i*self.future: self.history + i*self.future]
+                future_motion = x[:, self.history + i * self.future: self.history + (i+1) * self.future]
                 mu, logvar = self.vae.encode(future_motion, history_motion)
                 latent = self.reparameterize(mu, logvar)
                 primitives.append(latent)
@@ -97,7 +97,7 @@ class MotionPrimitive(nn.Module):
         with torch.no_grad():
             for i in range(num_primitive):
                 latent = z[:, i]
-                history_motion = x_out[-1][:, :self.history]
+                history_motion = x_out[-1][:, -self.history:]
                 future_motion = self.vae.decode(latent, history_motion, self.future)
                 x_out.append(future_motion)
 

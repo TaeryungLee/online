@@ -301,11 +301,11 @@ class CVAEWrapper_hist_dec(nn.Module):
             x_encoder: (B, T_comp, D_latent) - series of latent vectors with shape (T, D_latent)
         """
 
-        num_primitive = (x.shape[1]) // (self.future)
+        num_primitive = (x.shape[1] + self.history) // (self.future)
         primitives = []
         with torch.no_grad():
             for i in range(num_primitive):
-                future_motion = x[:, i * self.future: i * self.future + self.future]
+                future_motion = x[:, self.history + i * self.future: self.history + (i+1) * self.future]
                 # history_motion = x[:, self.future + i*self.history: self.future + (i+1)*self.history]
                 mu, logvar = self.cvae.prior(future_motion)
                 latent = self.cvae.reparameterize(mu, logvar)
@@ -316,13 +316,13 @@ class CVAEWrapper_hist_dec(nn.Module):
 
 
 
-    def decode_long(self, z, history_motion):
+    def decode_long(self, z, initial_history_motion):
         num_primitive = z.shape[1]
-        x_out = [history_motion]
+        x_out = [initial_history_motion]
         with torch.no_grad():
             for i in range(num_primitive):
                 latent = z[:, i]
-                history_motion = x_out[-1][:, :self.history]
+                history_motion = x_out[-1][:, -self.history:]
                 future_motion = self.cvae.decode(latent, history_motion, self.future)
                 x_out.append(future_motion)
 

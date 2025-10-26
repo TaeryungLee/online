@@ -264,7 +264,7 @@ class CVAEWrapper(nn.Module):
         self.future = cfg.future
 
 
-    def forward(self, x):
+    def forward(self, future_motion, history_motion):
         """
         Forward pass for training
         Args:
@@ -274,9 +274,7 @@ class CVAEWrapper(nn.Module):
             mu: (B, T, D_latent) - mean of the latent distribution
             logvar: (B, T, D_latent) - log variance of the latent distribution
         """
-        assert x.shape[1] == self.history + self.future
-
-        return self.cvae.forward(x[:, :self.history], x[:, self.history:])
+        return self.cvae.forward(future_motion, history_motion)
 
 
     def forward_long(self, x):
@@ -304,7 +302,7 @@ class CVAEWrapper(nn.Module):
         primitives = []
         with torch.no_grad():
             for i in range(num_primitive):
-                future_motion = x[:, i * self.future: i * self.future + self.future]
+                future_motion = x[:, i * self.future: (i + 1) * self.future]
                 # history_motion = x[:, self.future + i*self.history: self.future + (i+1)*self.history]
                 mu, logvar = self.cvae.prior(future_motion)
                 latent = self.cvae.reparameterize(mu, logvar)

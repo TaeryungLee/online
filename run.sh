@@ -143,16 +143,16 @@ CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion.py --num_workers 50 --dataname
 
 
 
-python train_motionprimitive.py --dataname t2m_272 --exp-name motionprimitive_dim512_nl9_dim512 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
 
 
-CUDA_VISIBLE_DEVICES=0 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl9_dim512_f8_h2 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
-CUDA_VISIBLE_DEVICES=1 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl13_dim512_f8_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
-CUDA_VISIBLE_DEVICES=2 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl17_dim512_f8_h2 --hidden_size 512 --depth 17 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
-CUDA_VISIBLE_DEVICES=3 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl13_dim512_f4_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 4 --history 2
+CUDA_VISIBLE_DEVICES=0 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl9_dim512_f8_h2 --hidden_size 512 --depth 9 --latent_dim 512 --n-heads 8 --kl_loss 1e-5 --kl_prior_loss 1e-4 --future 8 --history 2
+CUDA_VISIBLE_DEVICES=1 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl13_dim512_f8_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-5 --kl_prior_loss 1e-4 --future 8 --history 2
+CUDA_VISIBLE_DEVICES=2 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl17_dim512_f8_h2 --hidden_size 512 --depth 17 --latent_dim 512 --n-heads 8 --kl_loss 1e-5 --kl_prior_loss 1e-4 --future 8 --history 2
+CUDA_VISIBLE_DEVICES=3 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl13_dim512_f4_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-5 --kl_prior_loss 1e-4 --future 4 --history 2
 
-CUDA_VISIBLE_DEVICES=0 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim512_nl13_dim512_f4_h4 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 4 --history 4
-CUDA_VISIBLE_DEVICES=1 python train_cvae.py --dataname t2m_272 --exp-name cvae_hdim1024_nl13_dim512_f8_h2 --hidden_size 1024 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
 
-CUDA_VISIBLE_DEVICES=1 python train_cvae_hist_dec.py --dataname t2m_272 --exp-name cvae_hist_dec_hdim512_nl13_dim512_f8_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
+
+CUDA_VISIBLE_DEVICES=0 python train_motionprimitive.py --dataname t2m_272 --exp-name motionprimitive_dim512_nl13_dim512 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-4 --future 8 --history 2
+CUDA_VISIBLE_DEVICES=1 python train_cvae_hist_dec.py --dataname t2m_272 --exp-name cvae_hist_dec_hdim512_nl13_dim512_f8_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-5 --kl_prior_loss 1e-4 --future 8 --history 2
+
 

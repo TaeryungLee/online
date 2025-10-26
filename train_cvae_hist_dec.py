@@ -103,7 +103,7 @@ for nb_iter in range(1, args.warm_up_iter+1):
     # 세 번의 forward pass를 하도록 수정
     for fwd_idx in range(3):
         gt_motion_fwd = gt_motion[:, fwd_idx * args.future: (fwd_idx + 1) * args.future + args.history]
-        future_motion = gt_motion_fwd[:, args.future:]
+        future_motion = gt_motion_fwd[:, args.history:]
         if fwd_idx == 0:
             history_motion = gt_motion_fwd[:, :args.history]
         else:
@@ -112,12 +112,12 @@ for nb_iter in range(1, args.warm_up_iter+1):
         pred_motion, mu, logvar, kl_prior = net(future_motion, history_motion)
 
         history_motion_pred = pred_motion[:, -args.history:].clone().detach()
-        loss_motion = Loss(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_motion = Loss(pred_motion, future_motion)
         
         loss_kl = Loss.forward_KL(mu, logvar)
-        loss_root = Loss.forward_root(pred_motion, gt_motion_fwd[:, args.history:])
-        loss_vel = Loss.forward_vel_loss(pred_motion, gt_motion_fwd[:, args.history:])
-        loss_acc = Loss.forward_acc_loss(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_root = Loss.forward_root(pred_motion, future_motion)
+        loss_vel = Loss.forward_vel_loss(pred_motion, future_motion)
+        loss_acc = Loss.forward_acc_loss(pred_motion, future_motion)
 
         # loss seam
         seam_vel = history_motion[:, -1] - pred_motion[:, 0]
@@ -166,7 +166,7 @@ for nb_iter in range(1, args.total_iter + 1):
     # 세 번의 forward pass를 하도록 수정
     for fwd_idx in range(3):
         gt_motion_fwd = gt_motion[:, fwd_idx * args.future: (fwd_idx + 1) * args.future + args.history]
-        future_motion = gt_motion_fwd[:, args.future:]
+        future_motion = gt_motion_fwd[:, args.history:]
         if fwd_idx == 0:
             history_motion = gt_motion_fwd[:, :args.history]
         else:
@@ -175,12 +175,12 @@ for nb_iter in range(1, args.total_iter + 1):
         pred_motion, mu, logvar, kl_prior = net(future_motion, history_motion)
 
         history_motion_pred = pred_motion[:, -args.history:].clone().detach()
-        loss_motion = Loss(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_motion = Loss(pred_motion, future_motion)
         
         loss_kl = Loss.forward_KL(mu, logvar)
-        loss_root = Loss.forward_root(pred_motion, gt_motion_fwd[:, args.history:])
-        loss_vel = Loss.forward_vel_loss(pred_motion, gt_motion_fwd[:, args.history:])
-        loss_acc = Loss.forward_acc_loss(pred_motion, gt_motion_fwd[:, args.history:])
+        loss_root = Loss.forward_root(pred_motion, future_motion)
+        loss_vel = Loss.forward_vel_loss(pred_motion, future_motion)
+        loss_acc = Loss.forward_acc_loss(pred_motion, future_motion)
 
         # loss seam
         seam_vel = history_motion[:, -1] - pred_motion[:, 0]
