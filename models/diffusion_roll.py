@@ -69,6 +69,27 @@ def make_sigma_map(sigma_bw, target_shape, time_dim: int):
 # ODE helper funcs
 # ================
 
+def pcaf_uncertainty(W: int, device, dtype, mode: str = "cosine"):
+    """
+    PCAF uncertainty schedule (Eq. B/C/D in RPM paper).
+    tau in [0, W-1], higher tau => higher uncertainty.
+    """
+    tau = torch.arange(W, device=device, dtype=dtype)
+    frac = (tau + 1) / float(W)
+    if mode == "cosine":
+        return 1.0 - torch.cos(frac * (math.pi / 2.0))
+    if mode == "cosine_sq":
+        return 1.0 - torch.cos(frac * (math.pi / 2.0)) ** 2
+    if mode == "linear":
+        return frac
+    raise ValueError(f"Unknown pcaf_mode: {mode}")
+
+
+def pcaf_update(prev_x, new_x, u_map):
+    """PCAF update: P_t = P_{t-1} + U * tanh(f - P_{t-1})."""
+    return prev_x + u_map * torch.tanh(new_x - prev_x)
+
+
 @torch.no_grad()
 def ode_drift_from_x0(x, sigma, x0):
     """
@@ -192,6 +213,7 @@ class DiffusionRoll(nn.Module):
         k//2 프레임씩 윈도우를 뒤로 밀면서 스트리밍 롤아웃.
         - 각 윈도우는 Heun ODE(EDM) + frame-wise σ 스케줄로 clean을 생성.
         - 매 루프 후 앞쪽 hop 프레임을 외부로 내보내고, 뒤쪽엔 노이즈 hop 프레임을 덧붙여 다음 윈도우 시작.
+        - 각 롤아웃 후 PCAF 업데이트로 이전 예측과 새 예측을 부드럽게 합성.
         반환: (long_x0)  (B, C, total_frames, ...)
         """
         cfg_scale = self.cfg.cfg
@@ -211,9 +233,20 @@ class DiffusionRoll(nn.Module):
 
         # 현재 clean 윈도우
         cur_x = init_x0.clone()
+        prev_x = cur_x
 
         # w 인덱스(프레임별 σ 계산용)
         w = torch.arange(self.W, device=device, dtype=torch.float32)[None, :]  # [1,W]
+
+        # PCAF uncertainty map (cosine by default, per RPM paper)
+        use_pcaf = getattr(self.cfg, "pcaf_update", True)
+        pcaf_mode = getattr(self.cfg, "pcaf_mode", "cosine")
+        if use_pcaf:
+            u_profile = pcaf_uncertainty(self.W, device=device, dtype=cur_x.dtype, mode=pcaf_mode)
+            u_bw = u_profile[None, :].expand(B, -1).contiguous()
+            u_map = make_sigma_map(u_bw, cur_x.shape, self.time_dim)
+        else:
+            u_map = None
 
         # ---- 1) 현재 윈도우에서 Heun ODE로 다음 clean 윈도우 생성 ----
         # i=0의 frame-wise σ
@@ -223,7 +256,7 @@ class DiffusionRoll(nn.Module):
         sigma0_map = make_sigma_map(sigma0, cur_x.shape, self.time_dim)       # [B,1,...,W,...,1]
 
         eps0 = torch.randn_like(cur_x)
-        cur_x = cur_x + (sigma0_map * eps0)
+        cur_x = prev_x + (sigma0_map * eps0)
 
         null_ctx = self.null_ctx.expand(B, condition.shape[1], -1)
         len_uncond = torch.ones(B, device=device, dtype=torch.long)
@@ -272,6 +305,10 @@ class DiffusionRoll(nn.Module):
                     d_next = ode_drift_from_x0(x_eul, sb_n, x0_n)
                     cur_x = x_eul + 0.5 * dt * (d_cur + d_next)
 
+            # ---- 1.5) PCAF update ----
+            if use_pcaf:
+                cur_x = pcaf_update(prev_x, cur_x, u_map)
+
             # ---- 2) 앞쪽 hop 프레임을 외부로 배출 ----
             # 남은 필요 길이만큼 잘라 배출
             emit_len = min(hop, total_frames - produced)
@@ -294,6 +331,7 @@ class DiffusionRoll(nn.Module):
 
             # 다음 루프의 cur_x0
             cur_x = torch.cat([prefix, tail_noise], dim=self.time_dim)
+            prev_x = cur_x
 
         # 마지막: 아직 window의 남은 프레임이 있고, total_frames을 채우지 못했다면(보통 위에서 종료됨) 처리
         # (일반적으로 위 while에서 정확히 채움)
@@ -397,4 +435,3 @@ class DiffusionRoll(nn.Module):
             x = x + 0.5 * h * (d_cur + d_next)
 
         return x
-

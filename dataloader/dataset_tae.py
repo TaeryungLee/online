@@ -14,7 +14,8 @@ class MotionDataset(data.Dataset):
         self.unit_length = unit_length
         self.dataset_name = dataset_name
 
-        if dataset_name == 't2m_272':
+        if dataset_name == 't2m_272' or dataset_name == 'humanml':
+            dataset_name = 't2m_272'
             self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.text_dir = pjoin(self.data_root, 'texts')
@@ -114,8 +115,8 @@ def DATALoader(dataset_name,
                unit_length = 4):
     
     trainSet = MotionDataset(dataset_name, window_size=window_size, unit_length=unit_length)
-    prob = trainSet.compute_sampling_prob()
-    sampler = torch.utils.data.WeightedRandomSampler(prob, num_samples = len(trainSet) * 1000, replacement=True)
+    # prob = trainSet.compute_sampling_prob()
+    # sampler = torch.utils.data.WeightedRandomSampler(prob, num_samples = len(trainSet) * 1000, replacement=True)
     train_loader = torch.utils.data.DataLoader(trainSet,
                                               batch_size,
                                               shuffle=True,

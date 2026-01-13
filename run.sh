@@ -156,3 +156,6 @@ CUDA_VISIBLE_DEVICES=0 python train_motionprimitive.py --dataname t2m_272 --exp-
 CUDA_VISIBLE_DEVICES=1 python train_cvae_hist_dec.py --dataname t2m_272 --exp-name cvae_hist_dec_hdim512_nl13_dim512_f8_h2 --hidden_size 512 --depth 13 --latent_dim 512 --n-heads 8 --kl_loss 1e-5 --kl_prior_loss 1e-4 --future 8 --history 2
 
 
+CUDA_VISIBLE_DEVICES=0 python train_causal_TAE.py --dataname t2m_272 --exp-name causaltae
+
+CUDA_VISIBLE_DEVICES=0 python train_t2m_diffusion_no_latent.py --num_workers 50 --dataname t2m_272 --exp-name denoiser_no_latent --denoiser_block 6 --denoiser_num_layers 12 --lr 2e-4 --overlap-size 4 --num_timesteps 4

@@ -197,7 +197,12 @@ while nb_iter <= args.total_iter:
     batch = next(train_loader_iter)
     text, m_tokens, m_tokens_len, caption_enc, caption_enc_len, idxs = batch
     text = list(text)
-    m_tokens, m_tokens_len, caption_enc, caption_enc_len, idxs = m_tokens.to(comp_device), m_tokens_len.to(comp_device), caption_enc.to(comp_device), caption_enc_len.to(comp_device), idxs.to(comp_device)
+    # Ensure all floating tensors are float32 to avoid dtype mismatches (e.g., Double vs Float)
+    m_tokens = m_tokens.to(comp_device).float()
+    caption_enc = caption_enc.to(comp_device).float()
+    m_tokens_len = m_tokens_len.to(comp_device)
+    caption_enc_len = caption_enc_len.to(comp_device)
+    idxs = idxs.to(comp_device)
 
 
     loss, pred_xstart = diffusion(m_tokens, caption_enc, caption_enc_len, idxs)
@@ -227,7 +232,6 @@ while nb_iter <= args.total_iter:
         os.makedirs(eval_vis_dir, exist_ok=True)
         best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_transformer_272_roll_no_latent(
             val_loader,
-            net,
             diffusion,
             logger,
             evaluator,

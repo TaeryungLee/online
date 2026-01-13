@@ -26,7 +26,8 @@ class Text2MotionDataset(data.Dataset):
         self.unit_length = unit_length
         
 
-        if dataset_name == 't2m_272':
+        if dataset_name == 't2m_272' or dataset_name == 'humanml':
+            dataset_name = 't2m_272'
             self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.text_dir = pjoin(self.data_root, 'texts')
