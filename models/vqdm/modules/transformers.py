@@ -18,7 +18,7 @@ from einops import rearrange
 from inspect import isfunction
 from torch.cuda.amp import autocast
 from torch.utils.checkpoint import checkpoint
-from models.modules.motion_embedding import MotionMaskEmbedding
+from models.vqdm.modules.motion_embedding import MotionMaskEmbedding
 
 class FullAttention(nn.Module):
     def __init__(self,

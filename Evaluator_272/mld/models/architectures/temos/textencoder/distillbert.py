@@ -22,7 +22,7 @@ class DistilbertEncoderBase(pl.LightningModule):
         self.tokenizer = AutoTokenizer.from_pretrained(modelpath)
 
         # Text model
-        self.text_model = AutoModel.from_pretrained(modelpath)
+        self.text_model = AutoModel.from_pretrained(modelpath, use_safetensors=False)
         # Don't train the model
         if not finetune:
             self.text_model.training = False

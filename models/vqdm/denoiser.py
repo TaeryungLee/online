@@ -9,9 +9,9 @@ from tqdm import tqdm
 
 from einops import rearrange
 from torch.cuda.amp import autocast
-from models.modules.transformers import Text2ImageTransformer, Condition2ImageTransformer
-from models.modules.clip_text_embedding import CLIPTextEmbedding
-from models.modules.action_embedding import EmbedAction
+from models.vqdm.modules.transformers import Text2ImageTransformer, Condition2ImageTransformer
+from models.vqdm.modules.clip_text_embedding import CLIPTextEmbedding
+from models.vqdm.modules.action_embedding import EmbedAction
 
 
 

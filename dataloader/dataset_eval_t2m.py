@@ -26,12 +26,13 @@ class Text2MotionDataset(data.Dataset):
         self.unit_length = unit_length
         
 
-        if dataset_name == 't2m_272':
+        if dataset_name == 't2m_272' or dataset_name == 'humanml':
             self.data_root = './data/humanml3d_272'
             self.motion_dir = pjoin(self.data_root, 'motion_data')
             self.text_dir = pjoin(self.data_root, 'texts')
             self.joints_num = 22
             self.max_motion_length = 300
+            self.meta_dir = pjoin(self.data_root, 'mean_std')
             fps = 30
             self.meta_dir = './data/humanml3d_272/mean_std'
             if is_test:

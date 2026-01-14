@@ -26,7 +26,9 @@ class Text2MotionDataset(data.Dataset):
         self.max_text_len = max_text_len
         self.normalize = normalize
         
-        if dataset_name == 't2m_272':
+        if dataset_name == 't2m_272' or dataset_name == 'humanml':
+            dataset_name = 't2m_272'
+            self.dataset_name = 't2m_272'
             self.data_root = './data/humanml3d_272'
             self.text_dir = pjoin(self.data_root, 'texts')
             self.text_enc_root = './data/text_enc/humanml3d_272/texts'
@@ -114,7 +116,8 @@ class Text2MotionDataset(data.Dataset):
 
         self.data_dict = data_dict
         self.name_list = new_name_list
-
+    def inv_transform(self, data):
+        return data * self.std + self.mean
     def __len__(self):
         return len(self.data_dict)
 

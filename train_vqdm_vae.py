@@ -67,6 +67,11 @@ logger.info(json.dumps(vars(args), indent=4, sort_keys=True))
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+##### ---- Without latent ---- #####
+args.latent_dir = os.path.join(f"./data/{'humanml3d_272' if args.dataset == 'humanml' else 'babel_272'}/motion_data")
+args.latent_dim = 272
+
+
 
 # w_vectorizer = WordVectorizer('./glove', 'our_vab')
 

@@ -16,17 +16,22 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, normalize=False):
         
         self.max_length = 64
         self.window_size = window_size
         self.pointer = 0
         self.dataset_name = dataset_name
         self.unit_length = unit_length
+        self.normalize = normalize
 
-        if dataset_name == 't2m_272':
+
+        if dataset_name == 't2m_272' or dataset_name == 'humanml':
+            dataset_name = 't2m_272'
+            self.dataset_name = 't2m_272'
             self.data_root = './data/humanml3d_272'
             self.text_dir = pjoin(self.data_root, 'texts')
+            self.meta_dir = pjoin(self.data_root, 'mean_std')
             self.joints_num = 22
             fps = 30
             self.max_motion_length = 78 * 4 // unit_length
@@ -41,6 +46,9 @@ class Text2MotionDataset(data.Dataset):
             for line in f.readlines():
                 id_list.append(line.strip())
 
+        if normalize:
+            self.mean = np.load(pjoin(self.meta_dir, 'Mean.npy')) 
+            self.std = np.load(pjoin(self.meta_dir, 'Std.npy'))
         new_name_list = []
         data_dict = {}
         for name in tqdm(id_list):
@@ -92,7 +100,8 @@ class Text2MotionDataset(data.Dataset):
 
         self.data_dict = data_dict
         self.name_list = new_name_list
-
+    def inv_transform(self, data):
+        return data * self.std + self.mean
     def __len__(self):
         return len(self.data_dict)
 
@@ -116,10 +125,24 @@ class Text2MotionDataset(data.Dataset):
         # m_tokens_len = m_tokens.shape[0]
         # if m_tokens_len < self.max_motion_length:
         #     m_tokens = np.concatenate([m_tokens, np.zeros((self.max_motion_length-m_tokens_len, m_tokens.shape[1]), dtype=int)], axis=0)
-        
-        idx = random.randint(0, len(m_tokens) - self.window_size)
-        m_tokens = m_tokens[idx:idx+self.window_size]
-        m_tokens_len = self.window_size
+        # print(len(m_tokens), self.window_size)
+        if len(m_tokens) >= self.window_size:
+            idx = random.randint(0, len(m_tokens) - self.window_size)
+            m_tokens = m_tokens[idx:idx+self.window_size]
+            m_tokens_len = self.window_size
+        else:
+            # pad to window_size when sequence is shorter than window
+            idx = 0
+            pad_len = self.window_size - m_tokens.shape[0]
+            pad_tokens = np.zeros((pad_len, m_tokens.shape[1]), dtype=m_tokens.dtype)
+            m_tokens = np.concatenate([m_tokens, pad_tokens], axis=0)
+            m_tokens_len = self.window_size
+
+        if self.normalize:
+            m_tokens = (m_tokens - self.mean) / self.std
+
+        else:
+            m_tokens = m_tokens
 
         return caption, m_tokens, m_tokens_len, idx
 
@@ -130,9 +153,10 @@ def DATALoader(dataset_name,
                 batch_size, latent_dir, 
                 unit_length=4,
                 window_size=64,
-                num_workers = 8) : 
+                num_workers = 8,
+                normalize=False) : 
 
-    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size),
+    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size, normalize=normalize),
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,
