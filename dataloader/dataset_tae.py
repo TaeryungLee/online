@@ -61,6 +61,7 @@ class MotionDataset(data.Dataset):
         for name in tqdm(id_list):
             try:
                 if dataset_name == 't2m_272':
+                    breakpoint()
                     motion = np.load(pjoin(self.motion_dir, name + '.npy'))
                 elif dataset_name == 't2m_babel_272':
                     if name.split('_')[0] == 'b':

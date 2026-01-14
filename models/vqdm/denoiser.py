@@ -344,7 +344,6 @@ class VQDM(nn.Module):
 
     def _train_loss(self, x, cond_emb, mask, is_train=True):                       # get the KL loss
         b, device = x.size(0), x.device
-        breakpoint()
 
         assert self.loss_type == 'vb_stochastic'
         x_start = x

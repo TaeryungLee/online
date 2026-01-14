@@ -16,7 +16,7 @@ def collate_fn(batch):
 
 '''For use of training text-2-motion generative model'''
 class Text2MotionDataset(data.Dataset):
-    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, normalize=False):
+    def __init__(self, dataset_name, unit_length = 1, latent_dir=None, window_size=64, max_text_len=32, normalize=False):
         
         self.max_length = 64
         self.window_size = window_size
@@ -24,6 +24,7 @@ class Text2MotionDataset(data.Dataset):
         self.dataset_name = dataset_name
         self.unit_length = unit_length
         self.normalize = normalize
+        self.max_text_len = max_text_len
 
 
         if dataset_name == 't2m_272' or dataset_name == 'humanml':
@@ -31,6 +32,7 @@ class Text2MotionDataset(data.Dataset):
             self.dataset_name = 't2m_272'
             self.data_root = './data/humanml3d_272'
             self.text_dir = pjoin(self.data_root, 'texts')
+            self.text_enc_root = './data/text_enc/humanml3d_272/texts'
             self.meta_dir = pjoin(self.data_root, 'mean_std')
             self.joints_num = 22
             fps = 30
@@ -60,10 +62,11 @@ class Text2MotionDataset(data.Dataset):
             # Read text
             with cs.open(pjoin(self.text_dir, name + '.txt')) as f:
                 text_data = []
+                text_enc_list = []
                 flag = False
                 lines = f.readlines()
 
-                for line in lines:
+                for i, line in enumerate(lines):
                     text_dict = {}
                     line_split = line.strip().split('#')
                     caption = line_split[0]
@@ -76,6 +79,15 @@ class Text2MotionDataset(data.Dataset):
 
                     text_dict['caption'] = caption
                     text_dict['tokens'] = t_tokens
+
+                    # Load per-line text encoding, like initializer
+                    try:
+                        text_enc_dir = pjoin(self.text_enc_root, name + f'_{i}.npy')
+                        caption_enc = np.load(text_enc_dir)
+                        text_enc_list.append(caption_enc)
+                    except Exception:
+                        # If missing, skip this sample
+                        continue
 
                     if f_tag == 0.0 and to_tag == 0.0:
                         flag = True
@@ -90,12 +102,14 @@ class Text2MotionDataset(data.Dataset):
                         new_name = '%s_%f_%f'%(name, f_tag, to_tag)
 
                         data_dict[new_name] = {'m_token_list': m_token_list_new,
-                                                    'text':[text_dict]}
+                                                    'text':[text_dict],
+                                                    'caption_enc': [caption_enc]}
                         new_name_list.append(new_name)
                     
             if flag:
                 data_dict[name] = {'m_token_list': m_token_list,
-                                    'text':text_data}
+                                    'text':text_data,
+                                    'caption_enc': text_enc_list}
                 new_name_list.append(name)
 
         self.data_dict = data_dict
@@ -108,10 +122,13 @@ class Text2MotionDataset(data.Dataset):
     def __getitem__(self, item):
         data = self.data_dict[self.name_list[item]]
         m_token_list, text_list = data['m_token_list'], data['text']
+        caption_enc_list = data.get('caption_enc', None)
         m_tokens = np.array(m_token_list)
 
-        text_data = random.choice(text_list)
+        idx_txt = random.choice(list(range(len(text_list))))
+        text_data = text_list[idx_txt]
         caption= text_data['caption']
+        caption_enc = caption_enc_list[idx_txt] if caption_enc_list is not None else None
 
         if len(m_tokens.shape) == 3:
             m_tokens = m_tokens.squeeze(0)
@@ -138,13 +155,27 @@ class Text2MotionDataset(data.Dataset):
             m_tokens = np.concatenate([m_tokens, pad_tokens], axis=0)
             m_tokens_len = self.window_size
 
+        # Truncate/pad caption_enc to self.max_text_len
+        if isinstance(caption_enc, np.ndarray):
+            orig_len = caption_enc.shape[0]
+            target_len = self.max_text_len
+            if orig_len > target_len:
+                caption_enc = caption_enc[:target_len]
+            elif orig_len < target_len:
+                pad_shape = (target_len - orig_len,) + tuple(caption_enc.shape[1:])
+                pad = np.zeros(pad_shape, dtype=caption_enc.dtype)
+                caption_enc = np.concatenate([caption_enc, pad], axis=0)
+            caption_enc_len = min(orig_len, target_len)
+        else:
+            caption_enc_len = 0
+
         if self.normalize:
             m_tokens = (m_tokens - self.mean) / self.std
 
         else:
             m_tokens = m_tokens
 
-        return caption, m_tokens, m_tokens_len, idx
+        return caption, m_tokens, m_tokens_len, caption_enc, caption_enc_len, idx
 
 
 
@@ -171,4 +202,3 @@ def cycle(iterable):
     while True:
         for x in iterable:
             yield x
-

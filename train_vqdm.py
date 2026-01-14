@@ -73,16 +73,20 @@ def pseudo_evaluation(eval_loader, vqvae, denoiser, prev_best_acc=0):
     correct = 0
     wrong = 0
     for _ in tqdm(eval_loader, desc=f"Evaluating accuracy", ncols=100, leave=False):
-        gt_motion, cond = next(train_loader_iter)
-        # gt_motion = gt_motion.cuda().float() # (bs, 64, dim)
-
+        batch = next(train_loader_iter)
+        if len(batch) == 6:
+            text, gt_motion, m_tokens_len, _, _, _ = batch
+        else:
+            text, gt_motion, m_tokens_len, _ = batch
+        text = list(text)
+        gt_motion = gt_motion.to(device).float()
+        m_tokens_len = m_tokens_len.to(device)
+        seq_len = gt_motion.shape[1]
+        mask = torch.arange(seq_len, device=device).unsqueeze(0) < m_tokens_len.unsqueeze(1)
+        cond = {'y': {'text': text, 'mask': mask}}
         cond['y'] = {key: val.to(device) if torch.is_tensor(val) else val for key, val in cond['y'].items()}
-        mask = cond['y']['mask'].squeeze(1).squeeze(1)
-        m_tokens_mask = mask[:, ::4]
-        B, J, D, T = gt_motion.shape
-        gt_motion = gt_motion.permute(0, 3, 1, 2).reshape(B, T, -1)
-
-        gt_motion = gt_motion.to(device)
+        mask = cond['y']['mask']
+        m_tokens_mask = mask[:, ::args.unit_length]
         gt_idxs = vqvae.encode(gt_motion)
 
         model_out = denoiser.sample(gt_idxs.shape, cond, device, filter_ratio=0)
@@ -262,36 +266,29 @@ for nb_iter in tqdm(range(1, args.total_iter + 1), desc=f"Denoiser training with
     # breakpoint()
 
     batch = next(train_loader_iter)
-    text, m_tokens, m_tokens_len, caption_enc, caption_enc_len, idxs = batch
+    breakpoint()
+    if len(batch) == 6:
+        text, gt_motion, m_tokens_len, _, _, idxs = batch
+    else:
+        text, gt_motion, m_tokens_len, idxs = batch
     text = list(text)
     # Ensure all floating tensors are float32 to avoid dtype mismatches (e.g., Double vs Float)
-    m_tokens = m_tokens.to(device).float()
-    caption_enc = caption_enc.to(device).float()
+    gt_motion = gt_motion.to(device).float()
     m_tokens_len = m_tokens_len.to(device)
-    caption_enc_len = caption_enc_len.to(device)
     idxs = idxs.to(device)
 
-
-    # loss, pred_xstart = diffusion(m_tokens, caption_enc, caption_enc_len, idxs)
-
-
-    breakpoint()
-
-    gt_motion, cond = next(train_loader_iter)
-    # gt_motion = gt_motion.cuda().float() # (bs, 64, dim)
-    gt_motion = gt_motion.to(device)
+    seq_len = gt_motion.shape[1]
+    mask = torch.arange(seq_len, device=device).unsqueeze(0) < m_tokens_len.unsqueeze(1)
+    cond = {'y': {'text': text, 'mask': mask}}
     cond['y'] = {key: val.to(device) if torch.is_tensor(val) else val for key, val in cond['y'].items()}
-    mask = cond['y']['mask'].squeeze()
-    m_tokens_mask = mask[:, ::4]
-    B, J, D, T = gt_motion.shape
-    gt_motion = gt_motion.permute(0, 3, 1, 2).reshape(B, T, -1)
+    mask = cond['y']['mask']
+    m_tokens_mask = mask[:, ::args.unit_length]
+
     with torch.no_grad():
         gt_idxs = vqvae.encode(gt_motion).detach()
 
-    # pred_motion, losses, perplexity = net(gt_motion, mask, "train")
-    # loss = losses['total_loss']
-
     model_out = denoiser(gt_idxs, cond, m_tokens_mask)
+    breakpoint()
 
     # logits = model_out['logits'][:, :-1]
     # pred_idxs = sample_from_logits(logits, top_k=1)
