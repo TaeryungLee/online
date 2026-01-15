@@ -23,6 +23,8 @@ from dataloader import dataset_eval_t2m as dataset_eval_t2m
 from Evaluator_272.mld.models.architectures.temos.textencoder.distillbert_actor import DistilbertActorAgnosticEncoder
 from Evaluator_272.mld.models.architectures.temos.motionencoder.actor import ActorAgnosticEncoder
 
+from utils.eval_trans import evaluation_vqdm
+
 # from evaluate.eval_humanml import evaluation_denoiser
 # from evaluate.eval_humanact12_uestc import evaluation_vqvae as evaluate_vqvae_humanact12_uestc
 # from evaluate.eval_ntu import evaluation_vqvae as evaluate_vqvae_ntu
@@ -156,7 +158,7 @@ if hasattr(train_loader.dataset, 'num_actions'):
     num_actions = train_loader.dataset.num_actions
 else:
     num_actions = 1
-    
+
 ## Denoiser input args
 denoiser = VQDM(
     args, train_loader.dataset.inv_transform if args.dataset in ["kit", "humanml", "ntu"] else None, device,
@@ -260,6 +262,15 @@ shutil.copy(args.pretrained_vqvae_pth, os.path.join(args.out_dir, "vqvae.pth"))
 epoch_loss = {}
 acc_list = []
 
+nb_iter, avg_loss = 0, 0.
+
+# Track best metrics across evaluations
+best_fid = float('inf')
+best_div = 0.0
+best_top1, best_top2, best_top3 = 0.0, 0.0, 0.0
+best_matching = float('inf')
+
+
 for nb_iter in tqdm(range(1, args.total_iter + 1), desc=f"Denoiser training with dataset {args.dataset}", ncols=100, file=sys.stdout):   
     
 
@@ -328,6 +339,66 @@ for nb_iter in tqdm(range(1, args.total_iter + 1), desc=f"Denoiser training with
         #     logger.info(f"-->  Accuracy improved from {round(prev_best_acc*100, 4)} to {round(acc*100, 4)}!!")
         #     prev_best_acc = acc
         #     torch.save({'net' : denoiser.state_dict()}, os.path.join(args.out_dir, 'net_best_acc.pth'))
-            
-        best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, writer, logger = \
-            evaluation_denoiser(args, args.out_dir, eval_loader, denoiser, vqvae, logger, writer, nb_iter, best_fid, best_iter, best_div, best_top1, best_top2, best_top3, best_matching, eval_wrapper=eval_wrapper)
+        prev_best_fid_local = best_fid
+        # Visualization directory for evaluation
+        eval_vis_dir = os.path.join(args.out_dir, 'eval_vis', str(nb_iter))
+        os.makedirs(eval_vis_dir, exist_ok=True)
+
+        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, logger = evaluation_vqdm(
+            val_loader,
+            denoiser,
+            vqvae,
+            logger,
+            evaluator,
+            device=device,
+            unit_length=args.unit_length,
+            prev_best_fid=best_fid,
+            prev_best_div=best_div,
+            prev_best_rprecision_pred=[best_top1, best_top2, best_top3],
+            prev_best_matching_score_pred=best_matching,
+            draw=True,
+            vis_dir=eval_vis_dir,
+        )
+        # Save best FID checkpoint if improved
+        if best_fid < prev_best_fid_local:
+            save_dict = {
+                'diffusion': denoiser.state_dict(),
+                'iter': nb_iter,
+                'best_fid': best_fid,
+                'best_top1': best_top1,
+                'best_top2': best_top2,
+                'best_top3': best_top3,
+                'best_matching': best_matching,
+            }
+            if 'scheduler' in locals():
+                try:
+                    save_dict['scheduler'] = scheduler.state_dict()
+                except Exception:
+                    pass
+            if 'optimizer' in locals():
+                try:
+                    save_dict['optimizer'] = optimizer.state_dict()
+                except Exception:
+                    pass
+            torch.save(save_dict, os.path.join(args.out_dir, 'best_fid.pth'))
+        # save 
+        latest_save = {
+            'diffusion': denoiser.state_dict(),
+            'iter': nb_iter,
+            'best_fid': best_fid,
+            'best_top1': best_top1,
+            'best_top2': best_top2,
+            'best_top3': best_top3,
+            'best_matching': best_matching,
+        }
+        if 'scheduler' in locals():
+            try:
+                latest_save['scheduler'] = scheduler.state_dict()
+            except Exception:
+                pass
+        if 'optimizer' in locals():
+            try:
+                latest_save['optimizer'] = optimizer.state_dict()
+            except Exception:
+                pass
+        torch.save(latest_save, os.path.join(args.out_dir, 'latest.pth'))

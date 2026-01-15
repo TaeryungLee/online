@@ -247,8 +247,8 @@ class VQDM(nn.Module):
         assert out.size()[2:] == x_t.size()[1:]
         log_pred = F.log_softmax(out.double(), dim=1).float()
         batch_size = log_x_t.size()[0]
-        if self.zero_vector is None or self.zero_vector.shape[0] != batch_size:
-            self.zero_vector = torch.zeros(batch_size, 1, self.content_seq_len).type_as(log_x_t)- 70
+        # if self.zero_vector is None or self.zero_vector.shape[0] != batch_size:
+        self.zero_vector = torch.zeros(batch_size, 1, log_pred.shape[2]).type_as(log_x_t)- 70
         log_pred = torch.cat((log_pred, self.zero_vector), dim=1)
         log_pred = torch.clamp(log_pred, -70, 0)
 
@@ -273,7 +273,7 @@ class VQDM(nn.Module):
         
 
         log_qt_one_timestep = self.q_pred_one_timestep(log_x_t, t)        # q(xt|xt_1)
-        log_qt_one_timestep = torch.cat((log_qt_one_timestep[:,:-1,:], log_zero_vector), dim=1)
+        log_qt_one_timestep = torch.cat((log_qt_one_timestep[:,:-1,:], log_zero_vector[:, :, :log_qt_one_timestep.shape[2]]), dim=1)
         log_ct = extract(self.log_ct, t, log_x_start.shape)         # ct
         ct_vector = log_ct.expand(-1, self.num_classes-1, -1)
         ct_vector = torch.cat((ct_vector, log_one_vector), dim=1)
@@ -282,7 +282,7 @@ class VQDM(nn.Module):
         # log_x_start = torch.cat((log_x_start, log_zero_vector), dim=1)
         # q = log_x_start - log_qt
         q = log_x_start[:,:-1,:] - log_qt
-        q = torch.cat((q, log_zero_vector), dim=1)
+        q = torch.cat((q, log_zero_vector[:, :, :q.shape[2]]), dim=1)
         q_log_sum_exp = torch.logsumexp(q, dim=1, keepdim=True)
         q = q - q_log_sum_exp
         log_EV_xtmin_given_xt_given_xstart = self.q_pred(q, t-1) + log_qt_one_timestep + q_log_sum_exp

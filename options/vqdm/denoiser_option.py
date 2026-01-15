@@ -95,7 +95,7 @@ def get_denoiser_args_parser():
         args.window_size = 200
     
     elif args.dataset in ['humanml', 'kit']:
-        args.window_size = 200
+        args.window_size = 300
 
     args.lr_scheduler = [int(args.total_iter * 0.9)]
 
