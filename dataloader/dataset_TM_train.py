@@ -186,8 +186,8 @@ def DATALoader(dataset_name,
                 window_size=64,
                 num_workers = 8,
                 normalize=False) : 
-
-    train_loader = torch.utils.data.DataLoader(Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size, normalize=normalize),
+    dataset = Text2MotionDataset(dataset_name, latent_dir = latent_dir, unit_length=unit_length, window_size=window_size, normalize=normalize)
+    train_loader = torch.utils.data.DataLoader(dataset,
                                               batch_size,
                                               shuffle=True,
                                               num_workers=num_workers,

@@ -266,7 +266,6 @@ for nb_iter in tqdm(range(1, args.total_iter + 1), desc=f"Denoiser training with
     # breakpoint()
 
     batch = next(train_loader_iter)
-    breakpoint()
     if len(batch) == 6:
         text, gt_motion, m_tokens_len, _, _, idxs = batch
     else:
@@ -288,7 +287,6 @@ for nb_iter in tqdm(range(1, args.total_iter + 1), desc=f"Denoiser training with
         gt_idxs = vqvae.encode(gt_motion).detach()
 
     model_out = denoiser(gt_idxs, cond, m_tokens_mask)
-    breakpoint()
 
     # logits = model_out['logits'][:, :-1]
     # pred_idxs = sample_from_logits(logits, top_k=1)
