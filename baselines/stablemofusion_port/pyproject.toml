@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stablemofusion-port"
+version = "0.1.0"
+description = "Vendored StableMoFusion with path-safe imports and a thin Python API."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "torch",
+  "numpy",
+  "tqdm",
+  "einops",
+  "diffusers",
+  "transformers",
+  "accelerate",
+  "opencv-python",
+  "scipy",
+  "matplotlib",
+  "spacy",
+  "panda3d",
+  "tensorboard",
+  "smplx",
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["stablemofusion*"]
